@@ -47,6 +47,9 @@ SvelteKit (`adapter-node`) · Svelte 5 runes · TypeScript · Bun · SSE, no Web
 | SSE stream, reconnect, heartbeat | `docs/architecture.md`, `docs/adr/0001-sse-not-websockets.md` |
 | Room store, sync, clamp, viewer | `docs/adr/0002-in-memory-live-rooms.md`, `docs/architecture.md` |
 | Auth, PIN, magic link, MCP auth | `docs/security.md`, `docs/adr/0003-presenter-auth-httponly-cookie.md` |
+| Deck parser, slide types | `docs/deck-syntax.md` (update it with the parser) |
+| An HTTP route under `src/routes` | `docs/http-api.md` (update it with the route) |
+| Viewer/presenter behaviour, signals | `docs/live-sessions.md` |
 | Storage, uploads, buckets | `docs/deployment.md` |
 | Viewer UI, theme, slide layout | `docs/design-system.md`, `docs/adr/0004-content-first-mobile-design.md` |
 | A roadmap item | `ROADMAP.md` |

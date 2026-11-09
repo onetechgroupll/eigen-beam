@@ -65,7 +65,7 @@ The tool descriptions of `create_deck` and `update_deck` carry deck-quality guid
 { "title": "Q3 update", "source": "# Slide 1\n\nText\n---\n# Slide 2\n\nText" }
 ```
 
-Returns `id`, `title`, `slideCount`, `editUrl`, `deckApiUrl` and `newRoomApiUrl`. MCP decks are created **unowned**, so the first signed-in browser editor can claim them instead of a service account blocking later edits.
+`source` uses the [deck syntax](deck-syntax.md). Returns `id`, `title`, `slideCount`, `editUrl`, `deckApiUrl` and `newRoomApiUrl`. MCP decks are created **unowned**, so the first signed-in browser editor can claim them instead of a service account blocking later edits.
 
 ### `get_deck`
 
