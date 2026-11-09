@@ -4,10 +4,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 TOKEN_FILE="${EB_MCP_TOKEN_FILE:-$REPO_ROOT/.data/secrets/eigenbeam-mcp-token.txt}"
-MCP_URL="${EB_MCP_URL:-https://eigen-beam-production.up.railway.app/mcp}"
+URL_FILE="${EB_MCP_URL_FILE:-$REPO_ROOT/.data/secrets/eigenbeam-mcp-url.txt}"
+
+# Endpoint: EB_MCP_URL wins, then the ignored URL file, then a local dev server.
+if [[ -n "${EB_MCP_URL:-}" ]]; then
+  MCP_URL="$EB_MCP_URL"
+elif [[ -s "$URL_FILE" ]]; then
+  MCP_URL="$(tr -d '\n\r' < "$URL_FILE")"
+else
+  MCP_URL="http://localhost:5173/mcp"
+fi
 
 # GUI apps on macOS often do not inherit the interactive shell PATH. Include the
-# common Node/Bun/Homebrew locations plus Hermes' bundled Node so Claude Code Mac
+# common Node/Bun/Homebrew locations so Claude Code on macOS
 # can launch this wrapper without manual terminal setup.
 export PATH="$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 

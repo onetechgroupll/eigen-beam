@@ -1,5 +1,9 @@
 name: Production Watchdog
 
+# Pings a deployed instance. Set the repository variable EB_WATCHDOG_URL
+# (Settings → Secrets and variables → Actions → Variables) to enable it;
+# without it the job is skipped, so forks stay quiet.
+
 on:
   schedule:
     - cron: '17 */2 * * *'
@@ -14,11 +18,12 @@ concurrency:
 
 jobs:
   watchdog:
-    name: eigen.beam production health
+    name: eigen.beam deployment health
     runs-on: ubuntu-latest
+    if: ${{ vars.EB_WATCHDOG_URL != '' }}
     timeout-minutes: 5
     env:
-      BASE_URL: https://eigen-beam-production.up.railway.app
+      BASE_URL: ${{ vars.EB_WATCHDOG_URL }}
     steps:
       - name: Check liveness
         run: |

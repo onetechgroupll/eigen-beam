@@ -42,11 +42,11 @@ Check mode labels in the JSON response; do not print secrets. Common causes:
 - `EB_MAGIC_LINK_SECRET` missing;
 - `EB_DECK_STORE` or `EB_ACTIVITY_STORE` not set to `postgres`;
 - `DATABASE_URL` missing/unreachable;
-- S3/Railway Bucket env incomplete;
+- S3 bucket env incomplete;
 - mail provider env incomplete;
 - MCP auth token env missing.
 
-See [`deployment.md`](deployment.md) and [`eigenbeam-ops.md`](eigenbeam-ops.md).
+See [`deployment.md`](deployment.md) and [`operations.md`](operations.md).
 
 ## MCP returns `401`
 

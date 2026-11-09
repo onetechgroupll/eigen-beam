@@ -78,7 +78,7 @@ Safe local data reset for throwaway dev state:
 rm -rf .data/dev .data/ci-smoke .data/manual-session
 ```
 
-Do not delete production data or Railway storage from local scripts.
+Do not point local scripts at production data or bucket storage.
 
 ## CI-credit discipline
 

@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { env, exit } from 'node:process';
 
-const BASE = (env.EB_SMOKE_BASE ?? 'https://eigen-beam-production.up.railway.app').replace(/\/$/, '');
+const BASE = (env.EB_SMOKE_BASE ?? 'http://127.0.0.1:4176').replace(/\/$/, '');
 const EXPECT_READY = env.EB_OPS_EXPECT_READY !== 'false';
 let passed = 0;
 

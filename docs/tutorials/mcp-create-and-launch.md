@@ -1,10 +1,10 @@
 # Tutorial: create and launch a deck through MCP
 
-AI clients can create a deck, update it and start a viewer room through the hosted MCP endpoint.
+AI clients can create a deck, update it and start a viewer room through an instance's MCP endpoint (your local dev server or a hosted instance).
 
 ## Setup
 
-See [`../eigenbeam-mcp.md`](../eigenbeam-mcp.md) and [`../eigenbeam-mcp-claude-setup.md`](../eigenbeam-mcp-claude-setup.md).
+See [`../mcp.md`](../mcp.md) and [`../mcp-claude-code.md`](../mcp-claude-code.md).
 
 Claude Code should see the server name:
 
@@ -27,7 +27,7 @@ Important: `create_room` never returns presenter tokens.
 bun run smoke:mcp
 ```
 
-Mutating production-style smoke, only when intentionally desired:
+Mutating smoke (creates a test deck, room and asset on the configured instance), only when intentionally desired:
 
 ```bash
 EB_MCP_SMOKE_MUTATE=1 bun run smoke:mcp

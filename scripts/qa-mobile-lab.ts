@@ -11,7 +11,7 @@ import {
 	type Page
 } from 'playwright';
 
-const BASE = process.env.EB_MOBILE_QA_BASE ?? process.env.EB_SMOKE_BASE ?? 'https://eigen-beam-production.up.railway.app';
+const BASE = process.env.EB_MOBILE_QA_BASE ?? process.env.EB_SMOKE_BASE ?? 'http://127.0.0.1:4176';
 const OUT_DIR = process.env.EB_MOBILE_QA_OUT ?? `reports/mobile-qa-lab-${new Date().toISOString().replace(/[:.]/g, '-')}`;
 const ENGINE_FILTER = process.env.EB_MOBILE_QA_ENGINES?.split(',').map((engine) => engine.trim()).filter(Boolean);
 const PROFILE_FILTER = process.env.EB_MOBILE_QA_PROFILES?.split(',').map((profile) => profile.trim()).filter(Boolean);

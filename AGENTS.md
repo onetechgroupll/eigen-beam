@@ -1,77 +1,52 @@
-# AGENTS.md — onetechgroupll/eigen-beam
+# AGENTS.md
 
-Projekt-Regeln für Coding-Agents (Codex, Claude Code u.a.). Bewusst knapp;
-tiefe Doku liegt unter `docs/` (Einstieg: `docs/index.md`).
+Rules for coding agents (Claude Code, Codex and others) working in this repository. Kept short on purpose; depth lives in `docs/` (start at `docs/index.md`).
 
-## Repo-Kontext
+## Context
 
-eigen.beam — mobile Live-Sync-Präsentation: Presenter steuert, das Publikum folgt
-live auf den eigenen Phones (SSE), vertikal-nativ, zero-friction, Content-First.
-SvelteKit + `adapter-node` auf Railway. Default-Branch `main`. Live:
-`eigen-beam-production.up.railway.app`. Side-Project von Lucas Lingens, MIT-lizenziert.
-**Off-limits:** NICHT zu Railway deployen während einer laufenden Live-Präsentation
-(Rooms sind In-Memory, Restart killt aktive Sessions). Roadmap/Architektur:
-`docs/eigenbeam-roadmap-2026-06-28.md`.
+eigen.beam: mobile live-sync presentations. The presenter steers from a phone, the audience follows live on their own phones over SSE. Vertical-native, zero join friction, content first. SvelteKit with `adapter-node`, one Node process, default branch `main`. MIT licensed.
 
-## Commands (exakte Invocation — nutze diese, nicht raten)
+## Commands (use exactly these)
 
-| Zweck | Command |
+| Purpose | Command |
 |---|---|
 | Install | `bun install` |
-| Typecheck | `bun run check` |
-| Lint | — (keine ESLint-Config; svelte-check deckt Typen + a11y-Warnings) |
-| Test (KANONISCH — Verifikations-Gate) | `bun run check` (bis vitest kommt) |
+| Typecheck (canonical gate) | `bun run check` |
+| Repository verification | `bun run verify:c1a` |
 | Build | `bun run build` |
+| Docs check | `bun run docs:check` |
+| Local production smokes | see `docs/testing.md` |
 
-Kein Test-Runner installiert. **Done-Gate heute = `bun run check` (svelte-check,
-0 Errors)** + manueller/headless SSE-Sync-Smoke. Sobald Tests kommen (Build-Paket
-C1a): vitest via **`bun run test`**, NIE `bun test` — Buns nativer Runner divergiert
-bei Mock-/Timer-Semantik. `TASK_STATUS: DONE` erst bei grünem `bun run check`.
+There is no unit-test runner yet. Done means `bun run check` with 0 errors, `bun run verify:c1a` green and, for UI or live-flow changes, the browser smokes green. If a test runner is added, it is vitest via `bun run test`; never `bun test` (Bun's native runner differs in mock and timer semantics).
 
-## Stack (gelocked)
+## Stack (fixed)
 
-SvelteKit (`adapter-node`) · Svelte 5 (Runes) · TypeScript · bun · **SSE, kein
-WebSocket** · In-Memory-Room-Store · Railway (Hosting; Postgres + Buckets geplant) ·
-Content-First-Design (Auto-Theme via `prefers-color-scheme`, Lime-Signaturakzent).
+SvelteKit (`adapter-node`) · Svelte 5 runes · TypeScript · Bun · SSE, no WebSockets · in-memory live rooms · Postgres and S3-compatible storage in production. Decisions: `docs/adr/`.
 
-## Hard Don'ts (Review-Reject)
+## Hard don'ts
 
-- `bun test` als Gate nutzen — *stattdessen:* `bun run check` (später `bun run test` = vitest).
-- SSE zu WebSocket umbauen — *stattdessen:* asymmetrisch bleiben (Viewer→POST, Server→SSE); der Live-Layer ergänzt nur einen Presenter-SSE-Stream.
-- `setSlide` ohne Index-Clamp — *stattdessen:* immer auf `[0, slides.length-1]` clampen (sonst weiße Slide vor Publikum).
-- SSE-Schreibfehler schlucken (`catch {}`) — *stattdessen:* die tote Verbindung reapen (unsub + clearInterval + close); Broadcast über Snapshot iterieren.
-- Zu Railway deployen während einer Live-Präsentation — *stattdessen:* zwischen Sessions (In-Memory-Rooms).
-- Content-First brechen (Chrome das mit der Folie um Aufmerksamkeit kämpft) — *stattdessen:* Overlay/asynchron, nie ein Panel.
-- `git add -A` · `--no-verify` · destruktive Git-Shortcuts.
+- Replacing SSE with WebSockets. Stay asymmetric: viewer → POST, server → SSE.
+- `setSlide` without clamping to `[0, slides.length - 1]`; an out-of-range index shows a blank slide to a live audience.
+- Swallowing SSE write errors (`catch {}`). Reap the dead connection (unsubscribe, clear the interval, close) and broadcast over a snapshot of subscribers.
+- Putting presenter tokens in URLs, viewer payloads, exports or MCP responses.
+- Adding viewer chrome that competes with the slide (`docs/design-system.md`).
+- `git add -A`, `--no-verify` or other destructive git shortcuts.
+- Committing anything under `.data/`, `reports/` or real env values.
 
-## Security-Hard-Rules
+## Security rules
 
-eigen.beam hat eine öffentliche URL + Presenter-Steuer-Surface:
+- Presenter token only as an httpOnly cookie scoped to `/present/:id`.
+- Room IDs stay unguessable (`nanoid`); keep subscriber caps and room TTLs on.
+- Public routes go through public serializers: no speaker notes, raw source, owner IDs or tokens.
+- Events and stats carry no PII.
 
-- Presenter-Token NUR via httpOnly-Cookie (scoped auf `/present/:id`), NIE im Query-String.
-- Room-IDs unguessable (`nanoid`), Subscriber-Cap pro Room, Room-TTL/Cap aktiv lassen.
-- `events`/Stats ohne PII.
+## Before the first edit, read
 
-## Pre-Build-Lookup (PFLICHT vor dem ERSTEN Edit — nicht optional)
-
-Diese Pages haben die konkreten Anti-Pattern, die auch test-grünen Code reissen.
-"AGENTS.md gelesen" reicht NICHT.
-
-| Du baust/änderst… | Pflicht-Lookup |
+| You are changing… | Read |
 |---|---|
-| SSE-Stream / Reconnect / Heartbeat | `docs/architecture.md` + Hard Don'ts oben (tote Verbindungen reapen) |
-| Room-Store / Sync / Clamp / Viewer | `docs/eigenbeam-design-2026-06-28.md` (Architektur) |
-| Storage / Bild-Upload / Buckets | `docs/deployment.md` (Railway Buckets, S3-kompatibel) |
-| Neues Feature aus dem Plan | `docs/eigenbeam-roadmap-2026-06-28.md` (Build-Plan + Foundation-Architektur) |
-| Viewer-UI / Theme / Slide-Layout | `docs/eigenbeam-design-2026-06-28.md` (Content-First-Design-System) |
-
-## Doku-Index
-
-| Thema | Wo |
-|---|---|
-| Einstieg | `docs/index.md` |
-| Architektur | `docs/architecture.md` |
-| Build-Plan + Foundation-Architektur | `docs/eigenbeam-roadmap-2026-06-28.md` |
-| Design-Doc (SSE/Tests/Design-System) | `docs/eigenbeam-design-2026-06-28.md` |
-| Deployment / Env | `docs/deployment.md` |
-| Security / Public Surface | `docs/security.md` |
+| SSE stream, reconnect, heartbeat | `docs/architecture.md`, `docs/adr/0001-sse-not-websockets.md` |
+| Room store, sync, clamp, viewer | `docs/adr/0002-in-memory-live-rooms.md`, `docs/architecture.md` |
+| Auth, PIN, magic link, MCP auth | `docs/security.md`, `docs/adr/0003-presenter-auth-httponly-cookie.md` |
+| Storage, uploads, buckets | `docs/deployment.md` |
+| Viewer UI, theme, slide layout | `docs/design-system.md`, `docs/adr/0004-content-first-mobile-design.md` |
+| A roadmap item | `ROADMAP.md` |

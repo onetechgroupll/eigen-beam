@@ -1,229 +1,133 @@
-# eigen.beam
+<a href="https://github.com/onetechgroupll/eigen-beam">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/readme/header-dark.svg">
+    <img alt="eigen.beam: present from your phone, the audience follows live on theirs. Open source, MIT, mobile-first." src="./docs/assets/readme/header-light.svg" width="100%">
+  </picture>
+</a>
 
-> Mobile Live-Sync-Präsentationen: Der Presenter steuert, das Publikum folgt live auf den eigenen Phones.
+<p align="center">
+  <a href="https://eigen-beam-production.up.railway.app"><picture><source media="(prefers-color-scheme: dark)" srcset="./docs/assets/readme/btn-demo-dark.svg"><img alt="Try the live demo" src="./docs/assets/readme/btn-demo-light.svg" height="40"></picture></a>
+  <a href="docs/deployment.md"><picture><source media="(prefers-color-scheme: dark)" srcset="./docs/assets/readme/btn-selfhost-dark.svg"><img alt="Self-host it" src="./docs/assets/readme/btn-selfhost-light.svg" height="40"></picture></a>
+  <a href="docs/index.md"><picture><source media="(prefers-color-scheme: dark)" srcset="./docs/assets/readme/btn-docs-dark.svg"><img alt="Read the docs" src="./docs/assets/readme/btn-docs-light.svg" height="40"></picture></a>
+  <br>
+  <a href="https://github.com/onetechgroupll/eigen-beam/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/onetechgroupll/eigen-beam/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-1e1d1b?style=flat-square"></a>
+</p>
 
-[![CI](https://github.com/onetechgroupll/eigen-beam/actions/workflows/ci.yml/badge.svg)](https://github.com/onetechgroupll/eigen-beam/actions/workflows/ci.yml)
-[![Production Watchdog](https://github.com/onetechgroupll/eigen-beam/actions/workflows/production-watchdog.yml/badge.svg)](https://github.com/onetechgroupll/eigen-beam/actions/workflows/production-watchdog.yml)
+**eigen.beam turns every phone in the room into a synced projector.** You present from a mobile remote; the audience joins by link or QR code and follows your slides live on their own phones. No app, no login, no beamer.
 
-**Live:** https://eigen-beam-production.up.railway.app
+It is built for the meetings where there is no screen: client pitches, offsites, standing updates, restaurant backrooms. A PDF sent afterwards cannot make everyone look at the same slide while you talk. eigen.beam can.
 
-**Stack:** SvelteKit · Svelte 5 · TypeScript · Bun · SSE · Railway · Postgres · S3/Railway Buckets · Resend · MCP
+> [!NOTE]
+> The app UI is currently **German** ("Weiter", "Live-Sync testen"). Code, docs and the MCP interface are English. Help with i18n is very welcome, see [Contributing](#contributing).
 
-`eigen.beam` turns every audience phone into a synced mini-projector. A presenter controls the current slide from a mobile-first remote; viewers join via link/QR and stay synced over Server-Sent Events without installing an app or logging in.
+### What it does
 
-## What this looks like
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/readme/features-dark.svg">
+  <img alt="Four features. Live sync: every phone on your slide, pushed over SSE. Mobile authoring: Markdown, PDF or PPTX in, 9:16 slides out. Audience signals: reactions and questions flow back to you. Replay and follow-up: heatmap, summary and a sharper deck v2." src="./docs/assets/readme/features-light.svg" width="100%">
+</picture>
 
-| Presenter remote | Viewer live |
-|---|---|
-| ![Presenter remote on a phone](docs/assets/readme/presenter-remote.png) | ![Viewer live slide on a phone](docs/assets/readme/viewer-live.png) |
+- **Live sync that holds.** The presenter controls the slide; viewers are locked to it and can only browse back. Late joiners and dropped connections resync instantly.
+- **Authoring on the phone.** Markdown with `---` slide breaks, templates, PDF/PPTX import, voice-to-slides, block types (big number, quote, compare, timeline) and progressive reveal.
+- **Ready Check.** Deterministic mobile-readability heuristics with one-tap fixes before you go live.
+- **Audience signals.** Reactions, questions and bookmarks reach the presenter without cluttering the viewer screen.
+- **Replay and follow-up.** Session summary, per-slide heatmap, follow-up pack and a draft deck v2 built from what landed.
+- **Accounts and sharing.** Magic-link sign-in, private/link/team decks and PIN-protected rooms.
+- **AI clients via MCP.** A remote MCP endpoint lets Claude and other clients create decks, upload images and start rooms.
 
-| Authoring + Ready Check | Replay command center |
-|---|---|
-| ![Authoring screen with Import Studio and Ready Check](docs/assets/readme/authoring-ready-check.png) | ![Replay command center on a phone](docs/assets/readme/replay-command-center.png) |
+### See it
 
-| Library remote |
-|---|
-| ![Account library with mobile deck cards](docs/assets/readme/library-remote.png) |
+| Presenter remote | Viewer, live | Replay |
+|---|---|---|
+| <img alt="Presenter remote on a phone" src="docs/assets/readme/presenter-remote.png" width="260"> | <img alt="Viewer following the live slide on a phone" src="docs/assets/readme/viewer-live.png" width="260"> | <img alt="Replay command center on a phone" src="docs/assets/readme/replay-command-center.png" width="260"> |
 
-## Product highlights
+### Quickstart
 
-- **Phone-native live presentation flow** — presenter remote, zero-friction viewer join, 9:16 content-first slides.
-- **Live sync via SSE** — server pushes current slide/reveal state; presenter actions are simple POSTs.
-- **Mobile authoring** — Markdown, templates, PDF/PPTX import, voice-to-slides, live preview.
-- **Ready Check / Deck Quality Coach** — deterministic mobile-live heuristics and safe quick fixes before launch.
-- **Audience signals** — reactions, questions, bookmarks, presence, reopen rate and presenter feed.
-- **Replay + follow-up** — replay page, session summary, heatmap, coach checklist, follow-up pack and deck-v2 draft.
-- **Accounts and sharing** — Magic-Link sessions, private/link/team deck visibility, protected PIN rooms.
-- **AI/MCP integration** — remote MCP endpoint for creating/updating decks, uploading assets and starting viewer rooms.
-- **Production ops** — health/readiness endpoints, CI smoke gates, manual Mobile QA Lab and production watchdog.
-
-## Use cases
-
-- Screenless customer pitches in offices, offsites or restaurant backrooms.
-- Quick internal sales/product updates where everyone has a phone but no projector.
-- AI-assisted mini-decks created through MCP and launched as a room.
-- Post-session follow-up with replay, heatmap and a better second version of the deck.
-- Field-testing whether a story lands before investing in a polished slide deck.
-
-## Quick start
-
-Requirements:
-
-- Bun 1.3.x
-- Node compatible with the current SvelteKit adapter-node build
-- Playwright browsers for browser/mobile QA when running smoke tests
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/readme/quickstart-dark.svg">
+  <img alt="Terminal: git clone, bun install, bun run dev, open localhost:5173, start a live session and open the viewer link on other phones." src="./docs/assets/readme/quickstart-light.svg" width="100%">
+</picture>
 
 ```bash
+git clone https://github.com/onetechgroupll/eigen-beam && cd eigen-beam
 bun install
-bun run doctor
-bun run docs:check
-bun run check
-bun run build
 bun run dev
 ```
 
-Open the local app printed by Vite and start a live session from the home page.
+Open the printed URL, tap **Live-Sync testen**, then open the viewer link in a second window. To join from real phones on the same Wi-Fi, start the server with `bun run dev -- --host` and use your machine's LAN address. Tap **Weiter** on the presenter remote and watch the viewer follow.
 
-## See it work in 90 seconds
+Local development needs no database and no API keys: decks are stored as files under `.data/`, mail goes to a local outbox.
 
-1. Run `bun run dev`.
-2. Open the local URL.
-3. Click **Live-Sync testen**.
-4. Open the viewer link on a second browser window or phone.
-5. Tap **Weiter** on the presenter remote.
-6. Watch the viewer stay in sync.
-
-For a production-like local proof, use the smoke flow below and run `bun run smoke:browser`.
-
-## Canonical commands
-
-| Purpose | Command |
-|---|---|
-| Install | `bun install` |
-| Local environment doctor | `bun run doctor` |
-| Documentation check | `bun run docs:check` |
-| Typecheck | `bun run check` |
-| Repository verification | `bun run verify:c1a` |
-| Build | `bun run build` |
-| Start production build | `bun run start` |
-| Browser smoke | `bun run smoke:browser` |
-| Replay smoke | `bun run smoke:replay` |
-| Ops smoke | `bun run smoke:ops` |
-| MCP smoke | `bun run smoke:mcp` |
-| Mobile QA Lab | `bun run qa:mobile` |
-| DB migrations | `bun run db:migrate` |
-
-For local production smoke testing:
+**Run it with Docker:**
 
 ```bash
-rm -rf build .svelte-kit/output .svelte-kit/generated
-bun run build
-ORIGIN=http://127.0.0.1:4316 \
-EB_MAGIC_LINK_SECRET=local-smoke-secret \
-EB_DATA_DIR=.data/ci-smoke \
-EB_DECK_STORE=file \
-EB_ACTIVITY_STORE=off \
-EB_MAIL_PROVIDER=outbox \
-PORT=4316 HOST=127.0.0.1 \
-node build
+docker build -t eigen-beam .
+docker run -p 3000:3000 -v eigenbeam-data:/data -e ORIGIN=http://localhost:3000 eigen-beam
 ```
 
-Then, in another shell:
+For a public instance with Postgres, S3-compatible storage and real mail, follow the [self-hosting guide](docs/deployment.md).
 
-```bash
-EB_SMOKE_BASE=http://127.0.0.1:4316 bun run smoke:browser
-EB_SMOKE_BASE=http://127.0.0.1:4316 bun run smoke:replay
-EB_SMOKE_BASE=http://127.0.0.1:4316 bun run smoke:ops
-```
-
-## Architecture at a glance
+### How it works
 
 ```text
-Presenter phone ── POST /present/:id/slide ──▶ SvelteKit server
-Viewer phones   ◀─ SSE /v/:id/stream ───────── In-memory live room
-Presenter phone ◀─ SSE /present/:id/events ─── Audience signals
+Presenter phone ── POST /present/:id/slide ──▶ SvelteKit server (adapter-node)
+Viewer phones   ◀─ SSE  /v/:id/stream ──────── in-memory live room
+Presenter phone ◀─ SSE  /present/:id/events ── audience signals
 
-Durable data: Postgres decks/replay/follows
-Assets: Railway Buckets / S3-compatible store
-Mail: Resend in production, outbox locally
-AI clients: /mcp over bearer/OAuth-compatible auth
+Durable data: Postgres or local files · Assets: S3-compatible or local files
 ```
 
-Key decisions:
+- **SSE, not WebSockets.** The flow is asymmetric, and `EventSource` reconnects on its own. ([ADR 0001](docs/adr/0001-sse-not-websockets.md))
+- **Live rooms are in-memory.** One fast process, no DB hit per viewer event. A restart ends active sessions, so don't deploy mid-talk. ([ADR 0002](docs/adr/0002-in-memory-live-rooms.md))
+- **Presenter control lives in an httpOnly cookie.** It never appears in a viewer URL or an MCP response. ([ADR 0003](docs/adr/0003-presenter-auth-httponly-cookie.md))
+- **Content first.** Chrome whispers, the slide talks. ([ADR 0004](docs/adr/0004-content-first-mobile-design.md))
 
-- **SSE, not WebSockets.** The live flow is asymmetric: server streams to viewers/presenter, clients POST mutations.
-- **Live rooms are in-memory.** Deploy/restart ends active sessions; do not deploy during a live presentation.
-- **Presenter control uses httpOnly cookies.** Presenter tokens are never placed in viewer URLs or MCP responses.
-- **Public payloads are serialized.** Viewer/replay/share/export surfaces strip presenter-only fields such as `speakerNotes` and raw source.
-- **AI/import is off the live path.** Expensive transformations happen before a session starts.
+More in [`docs/architecture.md`](docs/architecture.md) and the [ADR index](docs/adr/README.md).
 
-## Design principles
+### Stack
 
-- **Content first.** Chrome should never compete with the slide.
-- **Zero join friction.** Link/QR, no app install, no viewer login, no name entry.
-- **Live sync is the product.** If people can just read ahead like a PDF, the differentiator is gone.
-- **Phone-native, not desktop squeezed down.** 9:16 layouts, thumb targets and safe areas are first-class.
-- **Live layer stays lightweight.** Signals help the presenter; they do not turn the viewer into a dashboard.
+<p>
+  <img alt="SvelteKit" src="https://img.shields.io/badge/SvelteKit-1e1d1b?style=flat-square&logo=svelte&logoColor=FF3E00">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-1e1d1b?style=flat-square&logo=typescript&logoColor=3178C6">
+  <img alt="Bun" src="https://img.shields.io/badge/Bun-1e1d1b?style=flat-square&logo=bun&logoColor=white">
+  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-1e1d1b?style=flat-square&logo=postgresql&logoColor=4169E1">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-1e1d1b?style=flat-square&logo=docker&logoColor=2496ED">
+  <img alt="Railway" src="https://img.shields.io/badge/Railway-1e1d1b?style=flat-square&logo=railway&logoColor=white">
+  <img alt="Playwright" src="https://img.shields.io/badge/Playwright-1e1d1b?style=flat-square&logo=playwright&logoColor=2EAD33">
+  <img alt="MCP" src="https://img.shields.io/badge/MCP-1e1d1b?style=flat-square&logo=anthropic&logoColor=white">
+</p>
 
-## Documentation map
+### Documentation
 
-Start here:
+| I want to… | Read |
+|---|---|
+| run it locally and make changes | [`docs/development.md`](docs/development.md), [`docs/scripts.md`](docs/scripts.md) |
+| host my own instance | [`docs/deployment.md`](docs/deployment.md), [`docs/operations.md`](docs/operations.md) |
+| understand the design | [`docs/architecture.md`](docs/architecture.md), [`docs/adr/`](docs/adr/README.md), [`docs/design-system.md`](docs/design-system.md) |
+| connect Claude or another MCP client | [`docs/mcp.md`](docs/mcp.md), [`docs/mcp-claude-code.md`](docs/mcp-claude-code.md) |
+| test and verify | [`docs/testing.md`](docs/testing.md), [`docs/qa.md`](docs/qa.md) |
+| review security and privacy | [`docs/security.md`](docs/security.md), [`docs/privacy.md`](docs/privacy.md) |
+| see what's next | [`ROADMAP.md`](ROADMAP.md), [`CHANGELOG.md`](CHANGELOG.md) |
 
-- [`docs/index.md`](docs/index.md) — documentation index and reading paths.
-- [`docs/development.md`](docs/development.md) — first-10-minutes setup, local loop and CI-credit discipline.
-- [`docs/scripts.md`](docs/scripts.md) — script reference and common env vars.
-- [`docs/editor-and-agent-setup.md`](docs/editor-and-agent-setup.md) — Claude/Hermes/MCP/editor setup.
-- [`docs/fixtures.md`](docs/fixtures.md) — committed examples and fixture usage.
-- [`docs/architecture.md`](docs/architecture.md) — system diagram, live-room model and auth boundaries.
-- [`docs/testing.md`](docs/testing.md) — local, CI and mobile QA verification.
-- [`docs/deployment.md`](docs/deployment.md) — Railway deployment and production configuration.
-- [`docs/security.md`](docs/security.md) — public surfaces, invariants and reporting process.
-- [`docs/privacy.md`](docs/privacy.md) — data-use and privacy notes.
-- [`docs/troubleshooting.md`](docs/troubleshooting.md) — common local, CI, Railway, MCP and WebKit issues.
-- [`docs/qa.md`](docs/qa.md) — curated screenshot assets and manual QA checklist.
-- [`docs/eigenbeam-ops.md`](docs/eigenbeam-ops.md) — health/readiness and watchdogs.
-- [`docs/eigenbeam-mcp.md`](docs/eigenbeam-mcp.md) — remote MCP endpoint and tools.
-- [`docs/eigenbeam-mcp-claude-setup.md`](docs/eigenbeam-mcp-claude-setup.md) — Claude Code project setup.
-- [`docs/eigenbeam-design-2026-06-28.md`](docs/eigenbeam-design-2026-06-28.md) — product and architecture rationale.
-- [`docs/eigenbeam-roadmap-2026-06-28.md`](docs/eigenbeam-roadmap-2026-06-28.md) — implementation status and roadmap history.
+Tutorials: [first live session](docs/tutorials/manual-live-session.md) · [import to live room](docs/tutorials/import-to-live-room.md) · [create and launch via MCP](docs/tutorials/mcp-create-and-launch.md) · [replay to follow-up](docs/tutorials/replay-to-follow-up.md)
 
-Tutorials and examples:
+### FAQ
 
-- [`docs/tutorials/manual-live-session.md`](docs/tutorials/manual-live-session.md)
-- [`docs/tutorials/import-to-live-room.md`](docs/tutorials/import-to-live-room.md)
-- [`docs/tutorials/mcp-create-and-launch.md`](docs/tutorials/mcp-create-and-launch.md)
-- [`docs/tutorials/replay-to-follow-up.md`](docs/tutorials/replay-to-follow-up.md)
-- [`examples/`](examples/) — demo decks and MCP payload examples.
+**Can viewers skip ahead?** No, the viewer is locked to the presenter's slide and can only browse back. This is a social default, not DRM: the client has the slides it has already seen.
 
-## GitHub Actions
+**Does the audience need an account?** No. Viewers join by link or QR code. Accounts are only for presenters who want to save and share decks.
 
-- **CI** (`.github/workflows/ci.yml`) runs on push/PR: docs check; for app changes also typecheck, repo verification, build, local production server, browser/replay/ops smokes.
-- **Mobile QA Lab** (`.github/workflows/mobile-qa.yml`) is manual and uploads mobile screenshots/reports.
-- **Production Watchdog** (`.github/workflows/production-watchdog.yml`) runs on a credit-conscious schedule against health/readiness/OAuth metadata and can be triggered manually.
+**What happens during a deploy?** Active rooms end because live state is in-memory. Decks, replays and follows survive when you run with Postgres.
 
-## Production notes
+**Where are speaker notes visible?** Only on the presenter remote. Viewer, replay, share and export payloads strip them.
 
-Production runs on Railway at the live URL above. Required durable production modes are documented in [`docs/deployment.md`](docs/deployment.md) and [`docs/eigenbeam-ops.md`](docs/eigenbeam-ops.md).
+**Is the hosted demo stable?** It is the maintainer's own instance and gets redeployed without notice. Rooms end on every deploy. For anything that matters, self-host.
 
-Important operating rule:
+### Contributing
 
-> Do not deploy/restart while a real live presentation is running. Active live rooms are intentionally in-memory and will be lost on restart.
+Issues and pull requests are welcome. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md); [good first issues](https://github.com/onetechgroupll/eigen-beam/labels/good%20first%20issue) are labelled. Please report vulnerabilities privately as described in [`SECURITY.md`](SECURITY.md).
 
-## Privacy and data
+### License
 
-- Viewer events are designed around counts/types rather than PII.
-- Public replay/share/export surfaces must not expose presenter tokens, raw source, owner IDs or speaker notes.
-- Import/AI paths may process user content and require a signed user session in production.
-- MCP tools require bearer/OAuth auth; `create_room` returns viewer/replay links only.
-
-See [`docs/privacy.md`](docs/privacy.md) and [`docs/security.md`](docs/security.md).
-
-## FAQ
-
-### Why SSE and not WebSockets?
-
-The live model is asymmetric: clients POST mutations, the server streams state. Native `EventSource` reconnect behavior is enough and keeps the live layer simpler.
-
-### What happens during a deploy?
-
-Active live rooms end because room state is in-memory. Decks, replays and follows remain durable when production is configured with Postgres.
-
-### Can viewers skip ahead?
-
-The viewer is designed around the presenter-controlled live index. The goal is social sync, not DRM.
-
-### Does the audience need an account?
-
-No. Viewer join is link/QR based. Accounts are for creators managing saved decks.
-
-### Can AI clients create decks?
-
-Yes. The hosted MCP endpoint exposes authenticated tools for deck create/read/update, asset upload and viewer-room creation.
-
-### Where are speaker notes visible?
-
-Speaker notes are presenter-only and stripped from public viewer/replay/share/export payloads.
-
-## Repository status
-
-eigen.beam is open source under the [MIT License](LICENSE), built by [Lucas Lingens](https://github.com/onetechgroupll). Issues and PRs are welcome; see [`CONTRIBUTING.md`](CONTRIBUTING.md). Report vulnerabilities privately as described in [`SECURITY.md`](SECURITY.md).
+[MIT](LICENSE) © Lucas Lingens. Graphics use [Geist](https://vercel.com/font) and [Space Mono](https://fonts.google.com/specimen/Space+Mono) (SIL OFL); regenerate them with `python3 tools/readme/build.py`.
