@@ -9,7 +9,7 @@ import { DECK_TEMPLATE, toPublicSlides } from '../src/lib/decks.ts';
 import { slideFitProfile } from '../src/lib/slide-quality.ts';
 import { applyQualityFix, deckReadyCheck } from '../src/lib/deck-quality.ts';
 import { MemoryDeckRepository, FileDeckRepository, PostgresDeckRepository } from '../src/lib/server/decks-repo.ts';
-import { createMagicToken, createUserSessionToken, userIdForEmail, verifyMagicToken, verifyUserSessionToken } from '../src/lib/server/auth.ts';
+import { createCreatorToken, createMagicToken, createUserSessionToken, userIdForEmail, verifyCreatorToken, verifyMagicToken, verifyUserSessionToken } from '../src/lib/server/auth.ts';
 import { importTextToDeckSource, extractPptxText, extractPdfText } from '../src/lib/server/imports.ts';
 import { transcribeAudio, voiceFileToDeckSource } from '../src/lib/server/voice.ts';
 import { localClarify } from '../src/lib/server/clarity.ts';
@@ -311,6 +311,21 @@ Kurz.`;
 		assert.equal(verifyUserSessionToken(sessionToken.replace(/.$/, 'x'), 'secret'), null);
 		assert.equal(verifyUserSessionToken(createUserSessionToken('old@example.com', 'secret', 'oldnonce', 1), 'secret', 60 * 60 * 24 * 366 * 1000), null);
 		ok('User-Session-Cookie ist signiert und enthält Email/UserId');
+
+		// Creator-Cookie (eb_cid) ist signiert: niemand kann sich als fremder Actor ausgeben.
+		const creator = createCreatorToken('AbCdEfGh12345678', 'secret');
+		assert.deepEqual(verifyCreatorToken(creator, 'secret'), { creatorId: 'AbCdEfGh12345678', legacy: false });
+		assert.equal(verifyCreatorToken(creator, 'other-secret'), null);
+		assert.equal(verifyCreatorToken(creator.replace(/.$/, creator.endsWith('x') ? 'y' : 'x'), 'secret'), null);
+		const victim = userIdForEmail('victim@example.com');
+		assert.equal(verifyCreatorToken(victim, 'secret'), null, 'unsigned user id must not become an actor');
+		assert.equal(verifyCreatorToken(`${victim}.forged`, 'secret'), null);
+		assert.equal(verifyCreatorToken(createCreatorToken(victim, 'secret'), 'secret'), null, 'user ids are never creator ids, even when signed');
+		assert.equal(verifyCreatorToken('', 'secret'), null);
+		assert.equal(verifyCreatorToken(undefined, 'secret'), null);
+		assert.equal(verifyCreatorToken('short', 'secret'), null);
+		assert.deepEqual(verifyCreatorToken('AbCdEfGh12345678', 'secret'), { creatorId: 'AbCdEfGh12345678', legacy: true });
+		ok('Creator-Cookie ist signiert; gefälschte/fremde User-IDs werden verworfen, alte Zufalls-IDs bleiben gültig');
 
 		assert.equal(canonicalPublicOrigin(new URL('https://attacker.example/path'), { NODE_ENV: 'production', ORIGIN: 'https://eigen.beam' }), 'https://eigen.beam');
 		assert.throws(() => canonicalPublicOrigin(new URL('https://attacker.example/path'), { NODE_ENV: 'production' }), /ORIGIN/);

@@ -101,6 +101,33 @@ export function verifyPinUnlockToken(token: string | undefined, roomId: string, 
 	}
 }
 
+// Anonymous creator ID cookie (`eb_cid`). The value is `<id>.<hmac>`, so a
+// client cannot claim an arbitrary actor ID (for example a `user_…` ID, which
+// is derived from an email address and therefore guessable).
+const LEGACY_CREATOR_ID = /^[A-Za-z0-9_-]{16}$/;
+
+export function createCreatorToken(creatorId: string, secret: string): string {
+	return `${creatorId}.${sign(`creator:${creatorId}`, secret)}`;
+}
+
+export type VerifiedCreator = { creatorId: string; legacy: boolean };
+
+/**
+ * Accepts a signed creator token, or a pre-signing value that has the exact
+ * shape of an ID this app generated (`nanoid(16)`). Legacy values are random
+ * and unguessable; they keep existing anonymous decks reachable until the
+ * cookie is re-issued signed. Anything else, including user IDs, is rejected.
+ */
+export function verifyCreatorToken(token: string | undefined, secret: string): VerifiedCreator | null {
+	if (!token) return null;
+	const dot = token.lastIndexOf('.');
+	if (dot === -1) return LEGACY_CREATOR_ID.test(token) ? { creatorId: token, legacy: true } : null;
+	const creatorId = token.slice(0, dot);
+	const sig = token.slice(dot + 1);
+	if (!LEGACY_CREATOR_ID.test(creatorId) || !sig) return null;
+	return safeEqual(sig, sign(`creator:${creatorId}`, secret)) ? { creatorId, legacy: false } : null;
+}
+
 function sign(body: string, secret: string): string {
 	return createHmac('sha256', secret).update(body).digest('base64url');
 }
