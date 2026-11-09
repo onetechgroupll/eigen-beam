@@ -1,6 +1,7 @@
+import { requestDeckJson, type AiFallbackReason } from '$lib/server/claude';
 import { parseDeck } from '$lib/deck-parse';
 
-export type ClarifyResult = { title: string; source: string; mode: 'local' | 'ai' };
+export type ClarifyResult = { title: string; source: string; mode: 'local' | 'ai'; fallbackReason?: AiFallbackReason };
 
 export function localClarify(title: string, source: string): ClarifyResult {
 	const slides = parseDeck(source);
@@ -18,34 +19,17 @@ export function localClarify(title: string, source: string): ClarifyResult {
 	return { title: oneIdea(title || blocks[0]?.replace(/^#\s*/, '') || 'Klares Deck', 70), source: blocks.join('\n\n---\n\n'), mode: 'local' };
 }
 
-export async function aiClarify(title: string, source: string): Promise<ClarifyResult | null> {
-	const key = process.env.ANTHROPIC_API_KEY;
-	if (!key) return null;
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), 20_000);
-	try {
-		const res = await fetch('https://api.anthropic.com/v1/messages', {
-			method: 'POST',
-			signal: controller.signal,
-			headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-			body: JSON.stringify({
-				model: process.env.EB_CLAUDE_MODEL ?? 'claude-3-5-sonnet-latest',
-				max_tokens: 1800,
-				system: 'Du verdichtest eigen.beam Markdown-Slides. Output NUR JSON {"title":"...","source":"..."}. Vertikal/mobile-first 9:16. Eine Idee pro Slide. Maximal 15 Slides. Kurze Headlines, knappe Bodies, keine Textwände. Speaker Notes strikt als notes: ... behalten. --- trennt, keine Freiform-Layouts.',
-				messages: [{ role: 'user', content: `Titel: ${title}\n\nMarkdown:\n${source.slice(0, 50000)}` }]
-			})
-		});
-		if (!res.ok) return null;
-		const json = await res.json() as { content?: Array<{ text?: string }> };
-		const text = json.content?.map((part) => part.text ?? '').join('').trim() ?? '';
-		const parsed = JSON.parse(text) as { title?: string; source?: string };
-		if (!parsed.source) return null;
-		return { title: parsed.title ?? title, source: parsed.source, mode: 'ai' };
-	} catch {
-		return null;
-	} finally {
-		clearTimeout(timeout);
-	}
+/** Claude clarity pass with a local fallback; `fallbackReason` says why AI was not used. */
+export async function clarifyDeck(title: string, source: string): Promise<ClarifyResult> {
+	const ai = await requestDeckJson({
+		label: 'clarity',
+		maxTokens: 16000,
+		timeoutMs: 60_000,
+		system: 'Du verdichtest eigen.beam Markdown-Slides. Output NUR JSON {"title":"...","source":"..."}. Vertikal/mobile-first 9:16. Eine Idee pro Slide. Maximal 15 Slides. Kurze Headlines, knappe Bodies, keine Textwände. Speaker Notes strikt als notes: ... behalten. --- trennt, keine Freiform-Layouts.',
+		user: `Titel: ${title}\n\nMarkdown:\n${source.slice(0, 50000)}`
+	});
+	if (ai.ok) return { title: ai.title ?? title, source: ai.source, mode: 'ai' };
+	return { ...localClarify(title, source), fallbackReason: ai.reason };
 }
 
 function oneIdea(value: string, max: number): string {

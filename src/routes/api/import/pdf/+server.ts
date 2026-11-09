@@ -16,7 +16,7 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
 	try {
 		const title = typeof form?.get('title') === 'string' ? String(form.get('title')) : '';
 		const imported = await importFileToDeckSource(file, title);
-		return json({ title: imported.title, source: imported.source, slides: parseDeck(imported.source), extractedChars: imported.extractedChars, mode: imported.mode });
+		return json({ title: imported.title, source: imported.source, slides: parseDeck(imported.source), extractedChars: imported.extractedChars, mode: imported.mode, fallbackReason: imported.fallbackReason });
 	} catch (error) {
 		const status = typeof (error as { status?: unknown }).status === 'number' ? (error as { status: number }).status : 400;
 		return json({ error: true, message: (error as Error).message }, { status });

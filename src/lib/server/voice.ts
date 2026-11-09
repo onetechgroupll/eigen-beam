@@ -1,17 +1,18 @@
 import { aiImportLayout, importTextToDeckSource } from '$lib/server/imports';
+import type { AiFallbackReason } from '$lib/server/claude';
 
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
 type FetchLike = typeof fetch;
 
-export type VoiceImportResult = { title: string; source: string; transcript: string; mode: 'local' | 'ai' };
+export type VoiceImportResult = { title: string; source: string; transcript: string; mode: 'local' | 'ai'; fallbackReason?: AiFallbackReason };
 
 export async function voiceFileToDeckSource(file: File, title = '', fetcher: FetchLike = fetch): Promise<VoiceImportResult> {
 	const transcript = await transcribeAudio(file, fetcher);
 	const deckTitle = title || file.name.replace(/\.[^.]+$/, '') || 'Voice Deck';
 	const layout = await aiImportLayout(deckTitle, transcript);
-	if (layout) return { ...layout, transcript, mode: 'ai' };
-	return { title: deckTitle, source: importTextToDeckSource(transcript), transcript, mode: 'local' };
+	if ('source' in layout) return { ...layout, transcript, mode: 'ai' };
+	return { title: deckTitle, source: importTextToDeckSource(transcript), transcript, mode: 'local', fallbackReason: layout.fallbackReason };
 }
 
 export async function transcribeAudio(file: File, fetcher: FetchLike = fetch): Promise<string> {

@@ -9,6 +9,7 @@ This project does not currently publish formal versioned releases. This changelo
 - Architecture decision records (`docs/adr/`), public `ROADMAP.md` and `docs/design-system.md` replace the internal design and roadmap briefs.
 - Smoke, QA and MCP scripts default to a local instance instead of the reference deployment; the MCP wrapper reads its endpoint from `EB_MCP_URL` or `.data/secrets/eigenbeam-mcp-url.txt`.
 - The deployment watchdog targets the repository variable `EB_WATCHDOG_URL` and is skipped without it.
+- The AI clarity pass and import re-layout default to `claude-opus-5-5` (the old `claude-3-5-sonnet-latest` was retired, so AI calls fell back to the local layout without saying so). Both calls share one SDK-based module; the editor now says when and why it used the local layout.
 - Timeline entries accept labels with colons and hyphens (`- 09:30: Kick-off`); the built-in template's timeline slide parsed wrong before.
 - Decks created via MCP are no longer open to everyone. Until claimed they have no editor over HTTP and return no `source` or speaker notes; the MCP `editUrl` carries a signed claim token, and confirming **Deck übernehmen** on that page makes the browser the owner (a `POST`, so link previews cannot claim it).
 - User and API documentation: deck syntax reference, HTTP API reference, live-session explanation, a first-deck tutorial and how-tos for import, PIN rooms, sharing and export.
