@@ -65,7 +65,7 @@ The tool descriptions of `create_deck` and `update_deck` carry deck-quality guid
 { "title": "Q3 update", "source": "# Slide 1\n\nText\n---\n# Slide 2\n\nText" }
 ```
 
-`source` uses the [deck syntax](deck-syntax.md). Returns `id`, `title`, `slideCount`, `editUrl`, `deckApiUrl` and `newRoomApiUrl`. MCP decks are created **unowned**. The `editUrl` carries a signed claim token (`/edit/<id>?claim=…`): the browser that opens it becomes the owner. Until then nobody can edit the deck, read its notes or start a room with it over HTTP, so pass the `editUrl` only to the person who should own the deck. Once the deck is claimed, `editUrl` is the plain editor URL.
+`source` uses the [deck syntax](deck-syntax.md). Returns `id`, `title`, `slideCount`, `editUrl`, `deckApiUrl` and `newRoomApiUrl`. MCP decks are created **unowned**. The `editUrl` carries a signed claim token (`/edit/<id>?claim=…`): opening it shows a **Deck übernehmen** confirmation, and the browser that confirms becomes the owner. Link previews (which only fetch the page) cannot claim it. Until then nobody can edit the deck, read its notes or start a room with it over HTTP, so pass the `editUrl` only to the person who should own the deck. Once the deck is claimed, `editUrl` is the plain editor URL.
 
 ### `get_deck`
 
