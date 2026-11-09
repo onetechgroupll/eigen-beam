@@ -1,0 +1,43 @@
+import { publicSlidesToSource, toPublicSlides, type Deck, type PublicSlide } from '$lib/decks';
+
+export type PublicDeckExportJson = {
+	id: string;
+	title: string;
+	slideCount: number;
+	updatedAt: number;
+	slides: PublicSlide[];
+};
+
+export function deckToPublicExportMarkdown(deck: Deck): string {
+	return publicSlidesToSource(toPublicSlides(deck.slides));
+}
+
+export function deckToPublicExportJson(deck: Deck): PublicDeckExportJson {
+	const slides = toPublicSlides(deck.slides);
+	return {
+		id: deck.id,
+		title: deck.title,
+		slideCount: slides.length,
+		updatedAt: deck.updatedAt,
+		slides
+	};
+}
+
+export function deckExportFilename(title: string, ext: 'md' | 'json'): string {
+	const slug = title
+		.normalize('NFKD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 80);
+	return `${slug || 'deck'}.${ext}`;
+}
+
+export function attachmentHeaders(filename: string, contentType: string): Headers {
+	return new Headers({
+		'content-type': contentType,
+		'content-disposition': `attachment; filename="${filename}"`,
+		'cache-control': 'private, max-age=0, must-revalidate'
+	});
+}

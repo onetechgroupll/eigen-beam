@@ -1,0 +1,7 @@
+{
+  "tool": "create_deck",
+  "arguments": {
+    "title": "Screenless Pitch Demo",
+    "source": "# One room. Eight phones. One slide.\n\nNo projector required.\n---\n# Why not just send a PDF?\n\nA PDF gives every viewer their own timeline.\n---\n# Try it live\n\nOpen the viewer link on your phone and watch the presenter remote advance."
+  }
+}

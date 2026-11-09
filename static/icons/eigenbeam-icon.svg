@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="eigen.beam icon">
+  <rect width="512" height="512" rx="112" fill="#0b0b0c"/>
+  <rect x="94" y="72" width="324" height="368" rx="40" fill="#faf9f5"/>
+  <rect x="118" y="96" width="276" height="320" rx="28" fill="#111114"/>
+  <circle cx="256" cy="158" r="28" fill="#b6ff3a"/>
+  <path d="M154 252c50-56 109-56 153 0 18 23 33 38 51 45" fill="none" stroke="#b6ff3a" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M154 333h204" fill="none" stroke="#faf9f5" stroke-width="28" stroke-linecap="round"/>
+  <path d="M154 376h132" fill="none" stroke="#faf9f5" stroke-width="28" stroke-linecap="round" opacity="0.72"/>
+</svg>

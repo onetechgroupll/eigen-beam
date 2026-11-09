@@ -1,0 +1,51 @@
+{
+  "name": "eigenbeam",
+  "version": "0.0.1",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "doctor": "bun scripts/doctor.ts",
+    "docs:check": "python3 scripts/validate-docs.py",
+    "build": "vite build && node scripts/repair-adapter-node-build.mjs",
+    "start": "node build",
+    "preview": "node build",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "verify:c1a": "bun scripts/verify-c1a.ts",
+    "smoke:replay": "bun scripts/smoke-replay.ts",
+    "smoke:browser": "bun scripts/smoke-browser.ts",
+    "qa:mobile": "bun scripts/qa-mobile-lab.ts",
+    "qa:design": "node scripts/live-design-review-capture.mjs",
+    "smoke:ops": "bun scripts/smoke-ops.ts",
+    "watchdog:prod": "bun scripts/smoke-ops.ts",
+    "smoke:mcp": "bun scripts/smoke-mcp.ts",
+    "db:migrate": "bun scripts/migrate.ts"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-node": "^5.5.7",
+    "@sveltejs/kit": "^2.69.0",
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@types/adm-zip": "^0.5.8",
+    "@types/node": "^26.1.0",
+    "@types/pg": "^8.20.0",
+    "@types/qrcode": "^1.5.6",
+    "playwright": "^1.61.1",
+    "svelte": "^5.56.4",
+    "svelte-check": "^4.7.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.3"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1078.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "adm-zip": "^0.5.18",
+    "nanoid": "^5.1.16",
+    "pg": "^8.22.0",
+    "qrcode": "^1.5.4",
+    "zod": "^4.4.3"
+  },
+  "overrides": {
+    "cookie": "^0.7.2"
+  }
+}

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security issue
+    url: https://github.com/onetechgroupll/eigen-beam/security/policy
+    about: Do not open public issues for vulnerabilities; use private vulnerability reporting as described in SECURITY.md.

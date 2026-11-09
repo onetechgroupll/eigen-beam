@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: docs, check, build, browser smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EB_SMOKE_BASE: http://127.0.0.1:4316
+      EB_DATA_DIR: .data/ci-smoke
+      EB_DECK_STORE: file
+      EB_ACTIVITY_STORE: off
+      EB_MAIL_PROVIDER: outbox
+      EB_MAGIC_LINK_SECRET: ci-smoke-secret
+      ORIGIN: http://127.0.0.1:4316
+      PORT: '4316'
+      HOST: 127.0.0.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+
+      - name: Detect docs-only change
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          docs_only=false
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            changed="$(git diff --name-only HEAD^ HEAD || git show --name-only --format='' HEAD)"
+            printf '%s\n' "$changed"
+            docs_only=true
+            while IFS= read -r path; do
+              [[ -z "$path" ]] && continue
+              case "$path" in
+                README.md|CONTRIBUTING.md|SECURITY.md|CODE_OF_CONDUCT.md|CHANGELOG.md|LICENSE) ;;
+                docs/*|examples/*|reports/*) ;;
+                .github/ISSUE_TEMPLATE/*|.github/pull_request_template.md) ;;
+                scripts/validate-docs.py) ;;
+                *) docs_only=false ;;
+              esac
+            done <<< "$changed"
+          fi
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+
+      - name: Docs check
+        run: python3 scripts/validate-docs.py
+
+      - name: Setup Bun
+        if: steps.changes.outputs.docs_only != 'true'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        if: steps.changes.outputs.docs_only != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Install Chromium for Playwright smokes
+        if: steps.changes.outputs.docs_only != 'true'
+        run: bunx playwright install --with-deps chromium
+
+      - name: Typecheck
+        if: steps.changes.outputs.docs_only != 'true'
+        run: bun run check
+
+      - name: Repository verification
+        if: steps.changes.outputs.docs_only != 'true'
+        run: bun run verify:c1a
+
+      - name: Build
+        if: steps.changes.outputs.docs_only != 'true'
+        run: bun run build
+
+      - name: Start production build
+        if: steps.changes.outputs.docs_only != 'true'
+        run: |
+          set -euo pipefail
+          rm -rf "$EB_DATA_DIR"
+          node build > /tmp/eigenbeam-ci.log 2>&1 &
+          echo "$!" > /tmp/eigenbeam-ci.pid
+          for i in $(seq 1 40); do
+            if curl --fail --silent --show-error --max-time 3 "$EB_SMOKE_BASE/healthz" >/dev/null; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/eigenbeam-ci.pid)" 2>/dev/null; then
+              cat /tmp/eigenbeam-ci.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/eigenbeam-ci.log
+          exit 1
+
+      - name: Browser smoke
+        if: steps.changes.outputs.docs_only != 'true'
+        run: bun run smoke:browser
+
+      - name: Replay smoke
+        if: steps.changes.outputs.docs_only != 'true'
+        run: bun run smoke:replay
+
+      - name: Ops smoke
+        if: steps.changes.outputs.docs_only != 'true'
+        run: bun run smoke:ops
+
+      - name: Upload server log on failure
+        if: failure() && steps.changes.outputs.docs_only != 'true'
+        uses: actions/upload-artifact@v5
+        with:
+          name: ci-server-log
+          path: /tmp/eigenbeam-ci.log
+          if-no-files-found: ignore

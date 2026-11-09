@@ -1,0 +1,12 @@
+node_modules
+/build
+/.svelte-kit
+/package
+.env
+.env.*
+!.env.example
+.DS_Store
+# Lokaler File-Deck-Store (FileDeckRepository) — Persistenz, nicht committen
+/.data
+# Lokale QA-/Review-Reports
+/reports

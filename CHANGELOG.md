@@ -1,0 +1,29 @@
+# Changelog
+
+This project does not currently publish formal versioned releases. This changelog tracks major repo/product milestones at a human-readable level.
+
+## Unreleased / current main
+
+- Added top-level GitHub documentation: README, docs index, testing/deployment/security guides, contribution/security policies and GitHub templates.
+- Added CI workflow for check, repository verification, build, local production browser/replay/ops smokes.
+- Added manual Mobile QA Lab GitHub workflow with mobile screenshot/report artifacts.
+- Added Import Preview, import progress/error states and Ready Check / Deck Quality Coach.
+- Added mobile account library as a launch surface with saved deck remote cards.
+- Polished mobile authoring and library flows for phone ergonomics.
+
+## 2026-07 production hardening and product expansion
+
+- Production Railway deployment with Postgres persistence, bucket-backed assets and Resend mail.
+- Health/readiness endpoints and production watchdog.
+- Hosted MCP endpoint with deck create/read/update, room creation and asset upload tools.
+- OAuth protected-resource metadata and optional client-credentials token issuer.
+- Replay, follow-up pack, slide heatmap, deck-v2 draft and session coach.
+- Account/Magic-Link flow, deck sharing modes and PIN-protected rooms.
+
+## 2026-06 foundation
+
+- Initial SvelteKit `adapter-node` app.
+- Mobile-first presenter/viewer experience.
+- SSE-based live slide sync.
+- In-memory room model.
+- Markdown deck authoring and vertical slide renderer.

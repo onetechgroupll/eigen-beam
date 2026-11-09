@@ -1,0 +1,7 @@
+{
+  "tool": "create_room",
+  "arguments": {
+    "deckId": "replace-with-deck-id",
+    "pin": "optional-four-digit-pin"
+  }
+}

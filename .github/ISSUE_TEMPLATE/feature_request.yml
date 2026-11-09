@@ -1,0 +1,49 @@
+name: Feature request
+description: Propose a product or engineering improvement
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / opportunity
+      description: What user problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the desired behavior.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Primary surface
+      options:
+        - Authoring / import
+        - Presenter remote
+        - Viewer live sync
+        - Replay / recap / share
+        - Account / library
+        - MCP / AI clients
+        - Ops / deployment
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance checks
+      description: What should be true when this is done?
+      placeholder: |
+        - Mobile screenshot looks correct on iPhone profile
+        - Browser smoke covers the flow
+        - Public payload remains secret-safe
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / constraints
+      description: Include risks, dependencies or links.

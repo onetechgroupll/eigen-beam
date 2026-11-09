@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a reproducible defect in eigen.beam
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Do not paste secrets, bearer tokens, cookies, database URLs or magic links.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Step-by-step reproduction.
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - Home / landing
+        - Authoring / import
+        - Presenter remote
+        - Viewer live sync
+        - Replay / recap / share
+        - Account / library
+        - MCP / API
+        - Ops / deployment
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Screenshots, logs or run links with secrets redacted.
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification attempted
+      description: Commands or checks already run.
