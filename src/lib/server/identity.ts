@@ -2,7 +2,7 @@
 // AuthZ nutzt eine Actor-ID: eingeloggter User (`eb_uid`) gewinnt, sonst anon Creator (`eb_cid`).
 import type { Cookies } from '@sveltejs/kit';
 import { nanoid } from 'nanoid';
-import { authSigningSecret, createUserSessionToken, isProductionRuntime, verifyUserSessionToken } from '$lib/server/auth';
+import { authSigningSecret, createCreatorToken, createUserSessionToken, isProductionRuntime, verifyCreatorToken, verifyUserSessionToken, type VerifiedCreator } from '$lib/server/auth';
 
 const CREATOR_COOKIE = 'eb_cid';
 const USER_COOKIE = 'eb_uid';
@@ -17,7 +17,15 @@ const cookieOpts = {
 };
 
 export function getCreatorId(cookies: Cookies): string | null {
-	return cookies.get(CREATOR_COOKIE) ?? null;
+	return readCreator(cookies)?.creatorId ?? null;
+}
+
+function readCreator(cookies: Cookies): VerifiedCreator | null {
+	try {
+		return verifyCreatorToken(cookies.get(CREATOR_COOKIE), authSigningSecret());
+	} catch {
+		return null;
+	}
 }
 
 export function getUserId(cookies: Cookies): string | null {
@@ -41,11 +49,11 @@ export function getActorId(cookies: Cookies): string | null {
 }
 
 export function getOrCreateCreatorId(cookies: Cookies): string {
-	let id = cookies.get(CREATOR_COOKIE);
-	if (!id) {
-		id = nanoid(16);
-		cookies.set(CREATOR_COOKIE, id, cookieOpts);
-	}
+	const current = readCreator(cookies);
+	if (current && !current.legacy) return current.creatorId;
+	// New visitor, a rejected value, or a pre-signing cookie: (re-)issue it signed.
+	const id = current?.creatorId ?? nanoid(16);
+	cookies.set(CREATOR_COOKIE, createCreatorToken(id, authSigningSecret()), cookieOpts);
 	return id;
 }
 
