@@ -62,7 +62,7 @@ DATABASE_URL=postgres://... bun run db:migrate
 The reference instance runs on Railway; nothing in the code depends on it.
 
 1. Create a project with a Postgres database and a bucket (Railway Buckets are S3-compatible).
-2. Add a service from this repository. Railway detects the `Dockerfile`.
+2. Add a service from this repository. Railway detects the `Dockerfile`. (The image declares no Docker `VOLUME`; Railway rejects those. In production mode nothing needs a volume. For minimal mode, attach a Railway Volume at `/data`.)
 3. Set the [production env](#production-env). Railway's Postgres provides `DATABASE_URL`.
 4. Run `bun run db:migrate` against the database (for example with `railway run bun run db:migrate`).
 5. Point the [watchdog](operations.md#watchdog) at the public URL if you want scheduled health checks.

@@ -29,8 +29,9 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/build ./build
 COPY --from=build /app/migrations ./migrations
 RUN mkdir -p /data && chown node:node /data
+# No VOLUME instruction: Railway rejects it (use Railway Volumes). Mount /data
+# with `docker run -v` or your platform's volume feature instead.
 USER node
-VOLUME ["/data"]
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
