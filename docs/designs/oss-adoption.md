@@ -23,18 +23,21 @@ Waves are ordered by technical dependency. Inside a wave, issues and pull reques
 
 | Wave | Work | Done when |
 |---|---|---|
-| Hotfix | Current AI default | One default model constant on a current Claude model; a visible note when the AI pass falls back to the local layout because the provider failed |
+| Hotfix (done) | Current AI default | Shipped in #9: one default model constant (`claude-opus-5-5`), and the editor says why the AI pass fell back to the local layout |
 | W0 | Roadmap as issues + metrics capture | Every roadmap item, including deferred ones, is an issue with `good first issue` / `help wanted` labels; daily capture runs |
 | W0 | End button in the presenter remote | The remote ends the session after a confirmation; viewers see the end screen with the replay link |
 | W0 | Lossless export and clone | `parseDeck(export(deck))` equals the deck's public slides for every slide type; owners can export their original source including notes; non-owners never receive notes. Uploaded images stay bound to the instance and the docs say so |
 | W1 | Releases and a public image | A version tag builds a public GHCR image and a GitHub release with changelog; the image migrates the database on boot (with a lock); `/readyz` checks the schema version; the release smoke boots against an empty database |
 | W1 | English UI | English and German chosen from the browser, including inline strings and the `lang` attribute; English demo deck and templates; README GIF |
-| Launch | Tell people | 60-second demo GIF, Show HN / Reddit post, listings in MCP server directories |
+| W1 | Real sessions | Three real sessions in front of an audience before the launch, with what broke written down |
+| Launch | Tell people | 60-second demo GIF, Show HN / Reddit post, listings in MCP server directories. The demo puts live sync on the phone first and shows MCP through today's bearer-token setup |
 | W2 | One-click Railway deploy | A README button creates the app from the GHCR image plus Postgres and a bucket; a mail provider key and a verified `EB_MAIL_FROM` are required fields so the first magic-link login actually arrives |
 | W2 | Question moderation | The presenter can hide, star and export audience questions; replays stay free of question text |
 | W3 | MCP for every major AI client | See below |
 
-### MCP for every AI client (W3)
+### MCP for every AI client (W3, gated)
+
+This wave only starts after a go/no-go decision 30 days after the launch, against thresholds written into the roadmap before the launch. On go, it starts as a pilot with the Claude clients; Codex and ChatGPT follow once there is demand for them.
 
 Goal: from Claude Code, Claude Desktop, claude.ai, Codex and ChatGPT, a prompt creates a deck **and** a room the presenter can control from their phone.
 
@@ -44,7 +47,7 @@ Before building:
 2. Design login so an OAuth flow survives the magic link: a code typed in the same browser instead of a link that only returns to `/account`.
 3. Choose the token model: stored, revocable tokens, typed as operator tokens (from env, global) or user tokens (bound to one account).
 4. Add a presenter hand-off: MCP returns an authorised presenter link for the room it created.
-5. Set limits for the reference instance: per-user quotas for decks, asset storage and rooms, automatic clean-up of old demo decks, and a usage and privacy notice.
+5. Decide who operates the reference instance and under which terms. Until then it accepts no open sign-ups; after that, per-user quotas for decks, asset storage and rooms, automatic clean-up of old demo decks, and a usage and privacy notice.
 
 Then build OAuth 2.1 with authorization code and PKCE next to the existing client-credentials flow. User tokens only see their own decks; decks created through them belong to that user directly. Security criteria: rate-limited client registration, exact `redirect_uri` matching, PKCE S256 required, single-use short-lived codes, clean-up of unused clients, existing scopes unchanged.
 
