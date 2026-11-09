@@ -31,7 +31,7 @@ export const POST: RequestHandler = async ({ request, url, getClientAddress }) =
 		sessionIdGenerator: undefined,
 		enableJsonResponse: true
 	});
-	const server = createEigenbeamMcpServer(canonicalPublicOrigin(url, env));
+	const server = createEigenbeamMcpServer(canonicalPublicOrigin(url, env), { canClaimDecks: mcpHasScopes(auth, ['deck:write']) });
 	try {
 		await server.connect(transport);
 		const response = await transport.handleRequest(request);

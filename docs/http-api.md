@@ -33,7 +33,7 @@ The **actor** is the signed-in user, or else the anonymous creator. A script kee
 
 New decks are `private`. Speaker notes and the raw `source` are returned only to callers with edit access.
 
-**Decks without an owner.** A deck created via MCP has no owner until it is claimed. Until then nobody has edit access over HTTP: no caller gets its `source` or speaker notes, and nobody can update it, upload to it, delete it or start a room with it. Its public slides behave like a `link` deck. To claim it, open the `editUrl` from the MCP response: it carries a signed `?claim=` token, and the browser that opens it becomes the owner and is redirected to the plain `/edit/:id`. Opening `/edit/:id` without a valid token returns `403`. Treat the `editUrl` like a password until it has been opened. `get_deck` returns a fresh claim link for decks that are still unowned.
+**Decks without an owner.** A deck created via MCP has no owner until it is claimed. Until then nobody has edit access over HTTP: no caller gets its `source` or speaker notes, and nobody can update it, upload to it, delete it or start a room with it. Its public slides behave like a `link` deck. To claim it, open the `editUrl` from the MCP response: it carries a signed `?claim=` token, and the browser that opens it becomes the owner and is redirected to the plain `/edit/:id`. Opening `/edit/:id` without a valid token returns `403`. Treat the `editUrl` like a password until it has been opened. `get_deck` returns a fresh claim link for decks that are still unowned, but only to MCP tokens with `deck:write`.
 
 ## Decks
 

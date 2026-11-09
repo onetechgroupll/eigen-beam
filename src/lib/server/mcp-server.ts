@@ -42,7 +42,13 @@ export type McpAssetResult = {
 
 export const MCP_DECK_AUTHORING_GUIDANCE = 'Deck-Qualität: vertikal/mobile-first im 9:16-Format denken; Eine Idee pro Slide; kurze Headlines, knappe Bodies, keine Textwände; ideal 5–12, maximal ≤15 Slides; Speaker Notes strikt als notes: ... getrennt halten; --- trennt Slides; Bilder als ![Alt](https://...) oder Asset-Markdown einfügen; unterstützte Blöcke: type: number/quote/compare/timeline.';
 
-export function createEigenbeamMcpServer(baseUrl: string): McpServer {
+export type McpServerOptions = {
+	/** Only callers with deck:write may receive claim links for unowned decks. */
+	canClaimDecks?: boolean;
+};
+
+export function createEigenbeamMcpServer(baseUrl: string, options: McpServerOptions = {}): McpServer {
+	const canClaimDecks = Boolean(options.canClaimDecks);
 	const server = new McpServer({ name: 'eigenbeam', version: '0.1.0' });
 
 	server.registerTool('create_deck', {
@@ -74,7 +80,7 @@ export function createEigenbeamMcpServer(baseUrl: string): McpServer {
 		// MCP-created decks are intentionally unowned. Only the browser that opens
 		// the signed editUrl (?claim=…) becomes the owner; nobody else can edit it.
 		const deck = await getDeckRepo().create(parsed.input, null);
-		const result = toMcpDeckResult(deck, baseUrl);
+		const result = toMcpDeckResult(deck, baseUrl, { includeClaimToken: canClaimDecks });
 		return {
 			content: [{ type: 'text', text: `Created eigen.beam deck "${result.title}" (${result.slideCount} slides): ${result.editUrl}` }],
 			structuredContent: result
@@ -107,7 +113,7 @@ export function createEigenbeamMcpServer(baseUrl: string): McpServer {
 	}, async ({ id }): Promise<{ content: Array<{ type: 'text'; text: string }>; structuredContent: McpDeckReadResult }> => {
 		const deck = await getDeckRepo().get(id);
 		if (!deck) throw new Error('Deck not found.');
-		const result = toMcpDeckReadResult(deck, baseUrl);
+		const result = toMcpDeckReadResult(deck, baseUrl, { includeClaimToken: canClaimDecks });
 		return {
 			content: [{ type: 'text', text: `Loaded eigen.beam deck "${result.title}" (${result.slideCount} slides).` }],
 			structuredContent: result
@@ -146,7 +152,7 @@ export function createEigenbeamMcpServer(baseUrl: string): McpServer {
 		if (!existing) throw new Error('Deck not found.');
 		const deck = await getDeckRepo().update(id, parsed.input, null);
 		if (!deck) throw new Error('Deck not found.');
-		const result = toMcpDeckReadResult(deck, baseUrl);
+		const result = toMcpDeckReadResult(deck, baseUrl, { includeClaimToken: canClaimDecks });
 		return {
 			content: [{ type: 'text', text: `Updated eigen.beam deck "${result.title}" (${result.slideCount} slides): ${result.editUrl}` }],
 			structuredContent: result
@@ -224,9 +230,11 @@ export function createEigenbeamMcpServer(baseUrl: string): McpServer {
 	return server;
 }
 
-export function toMcpDeckReadResult(deck: Deck, baseUrl: string): McpDeckReadResult {
+export type McpDeckLinkOptions = { includeClaimToken?: boolean };
+
+export function toMcpDeckReadResult(deck: Deck, baseUrl: string, options: McpDeckLinkOptions = {}): McpDeckReadResult {
 	return {
-		...toMcpDeckResult(deck, baseUrl),
+		...toMcpDeckResult(deck, baseUrl, options),
 		source: deck.source,
 		updatedAt: deck.updatedAt
 	};
@@ -266,21 +274,25 @@ export function toMcpAssetResult(asset: { key: string; url: string; mime: string
 	};
 }
 
-function toMcpDeckResult(deck: Deck, baseUrl: string): McpDeckResult {
+function toMcpDeckResult(deck: Deck, baseUrl: string, options: McpDeckLinkOptions = {}): McpDeckResult {
 	return {
 		id: deck.id,
 		title: deck.title,
 		slideCount: deck.slides.length,
-		editUrl: deckEditUrl(deck, baseUrl),
+		editUrl: deckEditUrl(deck, baseUrl, options),
 		deckApiUrl: absoluteUrl(baseUrl, `/api/decks/${deck.id}`),
 		newRoomApiUrl: absoluteUrl(baseUrl, '/api/rooms')
 	};
 }
 
-/** Unowned decks get the signed claim link; owned decks the plain editor URL. */
-export function deckEditUrl(deck: Deck, baseUrl: string): string {
+/**
+ * Unowned decks get the signed claim link, but only for callers allowed to write
+ * (opening it makes the browser the owner, who can then edit and delete). Owned
+ * decks and read-only callers get the plain editor URL.
+ */
+export function deckEditUrl(deck: Deck, baseUrl: string, options: McpDeckLinkOptions = {}): string {
 	const url = new URL(`/edit/${deck.id}`, baseUrl);
-	if (!deck.ownerId) url.searchParams.set(DECK_CLAIM_PARAM, deckClaimToken(deck.id));
+	if (!deck.ownerId && options.includeClaimToken) url.searchParams.set(DECK_CLAIM_PARAM, deckClaimToken(deck.id));
 	return url.toString();
 }
 

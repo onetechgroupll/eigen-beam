@@ -448,10 +448,15 @@ Kurz.`;
 			assert.equal(isValidDeckClaimToken(unowned.id, null, 'test-secret'), false);
 			ok('Claim-Token ist an Deck-ID + Secret gebunden, Fälschungen/Kürzungen scheitern');
 
-			const editUrl = new URL(deckEditUrl(unowned, 'https://example.test'));
+			const editUrl = new URL(deckEditUrl(unowned, 'https://example.test', { includeClaimToken: true }));
 			assert.equal(editUrl.pathname, `/edit/${unowned.id}`);
 			assert.equal(isValidDeckClaimToken(unowned.id, editUrl.searchParams.get('claim')), true);
-			ok('MCP editUrl für unowned Decks trägt einen gültigen Claim-Token');
+			ok('MCP editUrl für unowned Decks trägt für deck:write-Caller einen gültigen Claim-Token');
+
+			assert.equal(deckEditUrl(unowned, 'https://example.test'), `https://example.test/edit/${unowned.id}`);
+			assert.equal(toMcpDeckReadResult(unowned, 'https://example.test').editUrl, `https://example.test/edit/${unowned.id}`);
+			assert.equal(new URL(toMcpDeckReadResult(unowned, 'https://example.test', { includeClaimToken: true }).editUrl).searchParams.has('claim'), true);
+			ok('Read-only MCP-Caller (ohne deck:write) bekommen keinen Claim-Token');
 
 			const claimedDeck = await claimRepo.claimUnowned(unowned.id, 'claimer-1');
 			assert.equal(claimedDeck?.ownerId, 'claimer-1');
@@ -460,7 +465,7 @@ Kurz.`;
 			assert.equal(canViewDeck(claimedDeck!, { actorId: 'stranger', teamId: null }), false);
 			assert.equal(await claimRepo.claimUnowned(unowned.id, 'stranger'), null);
 			assert.equal((await claimRepo.get(unowned.id))?.ownerId, 'claimer-1');
-			assert.equal(deckEditUrl(claimedDeck!, 'https://example.test'), `https://example.test/edit/${unowned.id}`);
+			assert.equal(deckEditUrl(claimedDeck!, 'https://example.test', { includeClaimToken: true }), `https://example.test/edit/${unowned.id}`);
 			ok('claimUnowned() übernimmt genau einmal; danach privat, Fremd-Claim scheitert, editUrl ohne Token');
 
 			const fileDir = '.data/verify-claim-' + Date.now();
@@ -470,10 +475,22 @@ Kurz.`;
 				assert.equal((await fileRepo.claimUnowned(fd.id, 'f-owner'))?.ownerId, 'f-owner');
 				assert.equal(await fileRepo.claimUnowned(fd.id, 'f-other'), null);
 				assert.equal((await fileRepo.get(fd.id))?.ownerId, 'f-owner');
+
+				// Parallele Claims (auch über getrennte Repo-Instanzen): genau einer gewinnt.
+				for (let round = 0; round < 5; round++) {
+					const race = await fileRepo.create({ title: 'R', source: '# R', slides: parseDeck('# R') }, null);
+					const otherRepo = new FileDeckRepository(fileDir);
+					const results = await Promise.all(
+						Array.from({ length: 8 }, (_, i) => (i % 2 ? otherRepo : fileRepo).claimUnowned(race.id, `racer-${i}`))
+					);
+					const winners = results.filter((r) => r !== null);
+					assert.equal(winners.length, 1, 'exactly one concurrent claim must succeed');
+					assert.equal((await fileRepo.get(race.id))?.ownerId, winners[0]!.ownerId);
+				}
 			} finally {
 				await rm(fileDir, { recursive: true, force: true });
 			}
-			ok('FileDeckRepository.claimUnowned() persistiert und claimt nur einmal');
+			ok('FileDeckRepository.claimUnowned() persistiert, claimt nur einmal und ist bei parallelen Claims exklusiv');
 		}
 
 		assert.match(MCP_DECK_AUTHORING_GUIDANCE, /9:16|vertikal/i);

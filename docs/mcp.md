@@ -73,7 +73,7 @@ The tool descriptions of `create_deck` and `update_deck` carry deck-quality guid
 { "id": "..." }
 ```
 
-Returns the deck including `source` and `updatedAt`, plus the same links. For a deck that is still unowned, `editUrl` is a claim link again, so a lost link can be recovered.
+Returns the deck including `source` and `updatedAt`, plus the same links. For a deck that is still unowned and a token with `deck:write`, `editUrl` is a claim link again, so a lost link can be recovered. Tokens with only `deck:read` get the plain editor URL, because claiming makes the browser the owner, who can then edit and delete the deck.
 
 ### `update_deck`
 
