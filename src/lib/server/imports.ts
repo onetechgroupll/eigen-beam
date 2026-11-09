@@ -1,7 +1,8 @@
+import { requestDeckJson, type AiFallbackReason } from '$lib/server/claude';
 export const MAX_IMPORT_BYTES = 20 * 1024 * 1024;
 const MAX_TEXT_CHARS = 40_000;
 
-export type ImportResult = { title: string; source: string; extractedChars: number; mode: 'local' | 'ai' };
+export type ImportResult = { title: string; source: string; extractedChars: number; mode: 'local' | 'ai'; fallbackReason?: AiFallbackReason };
 
 export function importTextToDeckSource(text: string): string {
 	const clean = normalizeText(text).slice(0, MAX_TEXT_CHARS);
@@ -26,39 +27,22 @@ export async function importFileToDeckSource(file: File, title = ''): Promise<Im
 	else text = new TextDecoder().decode(bytes);
 	if (!text.trim()) throw Object.assign(new Error('Konnte aus der Datei keinen Text extrahieren.'), { status: 422 });
 	const layout = await aiImportLayout(title || file.name.replace(/\.[^.]+$/, ''), text);
-	if (layout) return { ...layout, extractedChars: text.length };
+	if ('source' in layout) return { ...layout, extractedChars: text.length };
 	const source = importTextToDeckSource(text);
-	return { title: title || firstHeadline(source) || 'Importiertes Deck', source, extractedChars: text.length, mode: 'local' };
+	return { title: title || firstHeadline(source) || 'Importiertes Deck', source, extractedChars: text.length, mode: 'local', fallbackReason: layout.fallbackReason };
 }
 
-export async function aiImportLayout(title: string, text: string): Promise<{ title: string; source: string; mode: 'ai' } | null> {
-	const key = process.env.ANTHROPIC_API_KEY;
-	if (!key) return null;
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), 25_000);
-	try {
-		const res = await fetch('https://api.anthropic.com/v1/messages', {
-			method: 'POST',
-			signal: controller.signal,
-			headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-			body: JSON.stringify({
-				model: process.env.EB_CLAUDE_MODEL ?? 'claude-3-5-sonnet-latest',
-				max_tokens: 2200,
-				system: 'Du wandelst importierte PDF/PPT-Notizen in eigen.beam Markdown um. Output NUR JSON {"title":"...","source":"..."}. Vertikal/mobile-first: eine klare Idee pro Slide, kurze Headlines, --- trennt Slides, ++ für Reveal-Bullets. Keine erfundenen Fakten.',
-				messages: [{ role: 'user', content: `Titel: ${title}\n\nExtrahierter Text:\n${text.slice(0, MAX_TEXT_CHARS)}` }]
-			})
-		});
-		if (!res.ok) return null;
-		const json = await res.json() as { content?: Array<{ text?: string }> };
-		const raw = json.content?.map((p) => p.text ?? '').join('').trim() ?? '';
-		const parsed = JSON.parse(raw) as { title?: string; source?: string };
-		if (!parsed.source?.trim()) return null;
-		return { title: parsed.title?.trim() || title || firstHeadline(parsed.source) || 'Importiertes Deck', source: parsed.source, mode: 'ai' };
-	} catch {
-		return null;
-	} finally {
-		clearTimeout(timeout);
-	}
+/** Claude re-layout of imported text; `fallbackReason` says why AI was not used. */
+export async function aiImportLayout(title: string, text: string): Promise<{ title: string; source: string; mode: 'ai' } | { fallbackReason: AiFallbackReason }> {
+	const ai = await requestDeckJson({
+		label: 'import-layout',
+		maxTokens: 16000,
+		timeoutMs: 60_000,
+		system: 'Du wandelst importierte PDF/PPT-Notizen in eigen.beam Markdown um. Output NUR JSON {"title":"...","source":"..."}. Vertikal/mobile-first: eine klare Idee pro Slide, kurze Headlines, --- trennt Slides, ++ für Reveal-Bullets. Keine erfundenen Fakten.',
+		user: `Titel: ${title}\n\nExtrahierter Text:\n${text.slice(0, MAX_TEXT_CHARS)}`
+	});
+	if (!ai.ok) return { fallbackReason: ai.reason };
+	return { title: ai.title?.trim() || title || firstHeadline(ai.source) || 'Importiertes Deck', source: ai.source, mode: 'ai' };
 }
 
 export async function extractPptxText(bytes: Uint8Array): Promise<string> {

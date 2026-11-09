@@ -45,6 +45,13 @@
 	let importInput: HTMLInputElement | undefined = $state();
 	let voiceInput: HTMLInputElement | undefined = $state();
 
+	// Why the server used the local layout instead of Claude (see src/lib/server/claude.ts).
+	function localNote(reason: unknown): string {
+		if (reason === 'provider_error') return ' Claude war nicht erreichbar, daher lokal.';
+		if (reason === 'refusal') return ' Claude hat abgelehnt, daher lokal.';
+		if (reason === 'invalid_output') return ' Claude lieferte kein gültiges Ergebnis, daher lokal.';
+		return '';
+	}
 	function prev() { pidx = Math.max(0, safeIdx - 1); }
 	function next() { pidx = Math.min(count - 1, safeIdx + 1); }
 	function setTemplate(key: string) {
@@ -98,7 +105,7 @@
 			if (!res.ok) { err = true; msg = j.message ?? 'Klarheit fehlgeschlagen.'; return; }
 			source = j.source;
 			title = j.title ?? title;
-			msg = j.mode === 'ai' ? 'Mit Claude verdichtet.' : 'Lokal verdichtet (kein AI-Key im Server).';
+			msg = j.mode === 'ai' ? 'Mit Claude verdichtet.' : j.fallbackReason === 'no_key' ? 'Lokal verdichtet (kein AI-Key im Server).' : `Lokal verdichtet.${localNote(j.fallbackReason)}`;
 		} finally { clarifying = false; }
 	}
 
@@ -131,7 +138,7 @@
 			source = j.source;
 			title = j.title ?? title;
 			pidx = 0;
-			msg = j.mode === 'ai' ? 'Importiert und mit Claude vertikal neu gelayoutet.' : 'Importiert und lokal vertikal gelayoutet.';
+			msg = j.mode === 'ai' ? 'Importiert und mit Claude vertikal neu gelayoutet.' : `Importiert und lokal vertikal gelayoutet.${localNote(j.fallbackReason)}`;
 			importStatus = `Import fertig: ${parseDeck(j.source).length} mobile Folien erkannt.`;
 		} finally { importing = false; if (importInput) importInput.value = ''; }
 	}
@@ -150,7 +157,7 @@
 			source = j.source;
 			title = j.title ?? title;
 			pidx = 0;
-			msg = j.mode === 'ai' ? 'Audio transkribiert und mit Claude gelayoutet.' : 'Transkript in Slides umgebaut.';
+			msg = j.mode === 'ai' ? 'Audio transkribiert und mit Claude gelayoutet.' : `Transkript in Slides umgebaut.${localNote(j.fallbackReason)}`;
 			importStatus = `Import fertig: ${parseDeck(j.source).length} mobile Folien erkannt.`;
 		} finally { importing = false; if (voiceInput) voiceInput.value = ''; }
 	}

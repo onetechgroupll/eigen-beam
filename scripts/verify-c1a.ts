@@ -13,6 +13,8 @@ import { createCreatorToken, createMagicToken, createUserSessionToken, userIdFor
 import { importTextToDeckSource, extractPptxText, extractPdfText } from '../src/lib/server/imports.ts';
 import { transcribeAudio, voiceFileToDeckSource } from '../src/lib/server/voice.ts';
 import { localClarify } from '../src/lib/server/clarity.ts';
+import Anthropic from '@anthropic-ai/sdk';
+import { DEFAULT_CLAUDE_MODEL, claudeModel, parseDeckJson, requestDeckJson } from '../src/lib/server/claude.ts';
 import { sniffImage, S3AssetStore } from '../src/lib/server/assets.ts';
 import { claimPresenterToken, createRoom, endRoom, getReplay, recordViewerEvent, setSlide } from '../src/lib/server/rooms.ts';
 import { createUnsubToken, escapeHtml, recordFollow, recordFollowDetailed, sanitizeFollowTarget, verifyUnsubToken } from '../src/lib/server/followers.ts';
@@ -156,6 +158,39 @@ async function main() {
 	// 10) Clarity-Fallback und MIME-Sniffing
 	{
 		const longDeck = Array.from({ length: 20 }, (_, i) => `# Folie ${i + 1} ${'mit sehr langer Headline '.repeat(5)}\n${'Zu viel Fließtext für ein Phone. '.repeat(12)}\nnotes: Presenter-Kontext ${i + 1}`).join('\n---\n');
+		// Claude-Aufruf: aktueller Default, Override, und jeder Fehlerpfad nennt seinen Grund.
+		{
+			assert.equal(DEFAULT_CLAUDE_MODEL, 'claude-opus-5-5');
+			assert.equal(claudeModel({}), 'claude-opus-5-5');
+			assert.equal(claudeModel({ EB_CLAUDE_MODEL: ' claude-sonnet-5-5 ' }), 'claude-sonnet-5-5');
+			assert.deepEqual(parseDeckJson('```json\n{"title":"T","source":"# A"}\n```'), { title: 'T', source: '# A' });
+			assert.equal(parseDeckJson('{"title":"T","source":"  "}'), null);
+			assert.equal(parseDeckJson('kein json'), null);
+			const fake = (status: number, body: unknown) => new Anthropic({ apiKey: 'test-key', maxRetries: 0, fetch: async () => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }) });
+			const message = (content: unknown[], stop_reason = 'end_turn') => ({ id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-opus-5-5', content, stop_reason, stop_details: stop_reason === 'refusal' ? { type: 'refusal', category: 'cyber', explanation: 'x' } : null, usage: { input_tokens: 1, output_tokens: 1 } });
+			const req = { label: 'test', system: 's', user: 'u', maxTokens: 100, timeoutMs: 5_000 };
+			const okResult = await requestDeckJson(req, fake(200, message([{ type: 'thinking', thinking: '', signature: 'sig' }, { type: 'text', text: '{"title":"Neu","source":"# Folie"}' }])));
+			assert.deepEqual(okResult, { ok: true, title: 'Neu', source: '# Folie', model: 'claude-opus-5-5' });
+			let sent: { body: Record<string, unknown>; beta: string | null } | null = null;
+			const recording = new Anthropic({ apiKey: 'test-key', maxRetries: 0, fetch: async (_url: unknown, init?: RequestInit) => {
+				sent = { body: JSON.parse(String(init?.body)), beta: new Headers(init?.headers).get('anthropic-beta') };
+				return new Response(JSON.stringify(message([{ type: 'text', text: '{"source":"# X"}' }])), { status: 200, headers: { 'content-type': 'application/json' } });
+			} });
+			await requestDeckJson(req, recording);
+			assert.equal(sent!.body.model, 'claude-opus-5-5');
+			assert.deepEqual(sent!.body.output_config, { effort: 'low' });
+			assert.equal(sent!.body.fallbacks, 'default');
+			assert.equal(sent!.body.thinking, undefined, 'Opus 5.5 rejects disabled thinking; we must not send it');
+			assert.match(sent!.beta ?? '', /server-side-fallback-2026-07-01/);
+			assert.deepEqual(await requestDeckJson(req, fake(404, { type: 'error', error: { type: 'not_found_error', message: 'model: claude-3-5-sonnet-latest' } })), { ok: false, reason: 'provider_error' });
+			assert.deepEqual(await requestDeckJson(req, fake(200, message([], 'refusal'))), { ok: false, reason: 'refusal' });
+			assert.deepEqual(await requestDeckJson(req, fake(200, message([{ type: 'text', text: 'Hier ist dein Deck!' }]))), { ok: false, reason: 'invalid_output' });
+			const savedKey = process.env.ANTHROPIC_API_KEY;
+			delete process.env.ANTHROPIC_API_KEY;
+			assert.deepEqual(await requestDeckJson(req), { ok: false, reason: 'no_key' });
+			if (savedKey !== undefined) process.env.ANTHROPIC_API_KEY = savedKey;
+			ok('Claude-Aufruf: Default claude-opus-5-5, Override, Thinking-Blöcke ignoriert, Fallback-Gründe no_key/provider_error/refusal/invalid_output');
+		}
 		const clarified = localClarify('Sehr langer Titel '.repeat(10), longDeck);
 		assert.ok(clarified.source.includes('#'));
 		assert.equal(clarified.mode, 'local');
