@@ -30,6 +30,8 @@ POST /api/rooms
 
 After a correct PIN, the browser holds an `eb_pin_<roomId>` cookie for 12 hours. It unlocks the live room and its replay.
 
+The PIN can only be entered while the room is still in memory (live, or ended but not yet evicted or lost to a restart). Once the room is gone, a persisted replay stays readable only for browsers whose cookie is still valid; after the cookie expires, even the right PIN cannot reopen it, and `/replay/:roomId` answers `403`. Save the summary or follow-up as Markdown while you still have access.
+
 The PIN does **not** protect the deck itself. The recap (`/recap/:deckId`), share page and exports follow the deck's visibility; keep the deck `private` if its content is confidential ([how to share and export](share-and-export.md)).
 
 ## Verification
@@ -42,7 +44,7 @@ Open the audience link in a private browser window. You should see the PIN promp
 |---|---|---|
 | `Falsche PIN.` although it is right | PINs are compared exactly, after trimming spaces | check digits and case |
 | `Zu viele Anfragen.` | more than 10 attempts in 10 minutes from one IP | wait for the `retry-after` time |
-| Replay asks for the PIN again the next day | the unlock cookie lasts 12 hours | enter the PIN again |
+| Replay returns `403` the next day | the unlock cookie lasts 12 hours | enter the PIN on `/v/:roomId` if the room is still in memory; otherwise access cannot be renewed |
 | The PIN cannot be changed | a room's PIN is fixed at start | start a new room |
 
 ## Related

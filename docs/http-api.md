@@ -31,7 +31,9 @@ The **actor** is the signed-in user, or else the anonymous creator. A script kee
 | Delete | yes | no |
 | View, export, clone | yes | `link`: yes · `team`: signed-in users of the same email domain · `private`: no |
 
-New decks are `private`. Speaker notes and the raw `source` are returned only to the owner.
+New decks are `private`. Speaker notes and the raw `source` are returned only to callers with edit access.
+
+> **Unowned decks are open.** A deck created via MCP has no owner until someone saves it in the editor. Until then every caller counts as an editor: anyone with the ID can read its `source` and speaker notes, update it, upload to it and start rooms with it, regardless of visibility. Claim the deck (open and save it in the editor) before adding anything confidential.
 
 ## Decks
 
@@ -194,7 +196,7 @@ Errors: `400` (no file), `413` (too large), `422` (no text found), `501` (voice 
 
 ## Replays
 
-All replay endpoints work for live and, with `EB_ACTIVITY_STORE=postgres`, for finished rooms. PIN rooms need the `eb_pin_<id>` cookie (`403` otherwise). Responses are `cache-control: no-store`.
+All replay endpoints work for live and, with `EB_ACTIVITY_STORE=postgres`, for finished rooms. PIN rooms need the `eb_pin_<id>` cookie (`403` otherwise). Successful responses of the six derived endpoints carry `cache-control: no-store`; the base `GET /api/replay/:id` sets no cache header.
 
 | Endpoint | JSON key | Contents |
 |---|---|---|
