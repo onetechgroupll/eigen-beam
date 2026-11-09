@@ -4,6 +4,23 @@ Start with the [README](../README.md) for what eigen.beam is and a two-minute qu
 
 ## Reading paths
 
+### I want to write and present decks
+
+1. [`tutorials/first-deck.md`](tutorials/first-deck.md): write a deck, present it, follow it on a second screen.
+2. [`deck-syntax.md`](deck-syntax.md): every line type, directive, slide type and limit.
+3. [`live-sessions.md`](live-sessions.md): what presenter and viewers see, audience signals, ending, replays, limits.
+
+### How-to guides
+
+1. [`how-to/import-content.md`](how-to/import-content.md): turn a PDF, PowerPoint or voice recording into a deck.
+2. [`how-to/protect-a-room-with-a-pin.md`](how-to/protect-a-room-with-a-pin.md): PIN-protect a live room and its replay.
+3. [`how-to/share-and-export.md`](how-to/share-and-export.md): visibility, share links, export, clone.
+
+### I want to script it
+
+1. [`http-api.md`](http-api.md): every HTTP endpoint with auth, limits and errors.
+2. [`mcp.md`](mcp.md): the authenticated tool surface for AI clients.
+
 ### I want to run it and change it
 
 1. [`development.md`](development.md): first ten minutes, daily loop, reset and recovery.
@@ -33,7 +50,8 @@ Start with the [README](../README.md) for what eigen.beam is and a two-minute qu
 
 ### Tutorials and examples
 
-1. [`tutorials/manual-live-session.md`](tutorials/manual-live-session.md): run the core presenter/viewer flow.
+1. [`tutorials/first-deck.md`](tutorials/first-deck.md): your first deck, live on two screens.
+1. [`tutorials/manual-live-session.md`](tutorials/manual-live-session.md): run the core presenter/viewer flow, including a production-like build.
 2. [`tutorials/import-to-live-room.md`](tutorials/import-to-live-room.md): import content and launch a room.
 3. [`tutorials/mcp-create-and-launch.md`](tutorials/mcp-create-and-launch.md): create and launch a deck via MCP.
 4. [`tutorials/replay-to-follow-up.md`](tutorials/replay-to-follow-up.md): turn a replay into follow-up material.
@@ -43,6 +61,10 @@ Start with the [README](../README.md) for what eigen.beam is and a two-minute qu
 
 | File | Purpose |
 |---|---|
+| [`deck-syntax.md`](deck-syntax.md) | Deck format reference |
+| [`live-sessions.md`](live-sessions.md) | Presenter, viewers, signals, replays, limits |
+| [`http-api.md`](http-api.md) | HTTP endpoint reference |
+| [`how-to/`](how-to/import-content.md) | Import, PIN rooms, sharing and export |
 | [`development.md`](development.md) | Setup, daily loop, CI-friendly habits |
 | [`scripts.md`](scripts.md) | Script and env var reference |
 | [`testing.md`](testing.md) | Local, CI, smoke and mobile QA verification |

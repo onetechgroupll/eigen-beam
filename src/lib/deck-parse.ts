@@ -5,6 +5,10 @@ const HEADING = /^\s*#{1,6}\s+(.*\S)\s*$/;
 const IMAGE = /!\[([^\]]*)\]\(\s*([^)\s]+)[^)]*\)/;
 const DIRECTIVE = /^\s*([a-zA-Z][a-zA-Z0-9_-]*)\s*:\s*(.*)$/;
 const REVEAL = /^\s*(?:\+\+|>>|reveal:)\s*(.+)$/i;
+// Timeline entry `- label: text`. A spaced separator (`: ` or ` – `) wins, so
+// labels may contain colons and hyphens (`- 09:30: Kick-off`, `- Kick-off - Start`).
+// Compact entries without spaces (`- Q1:Pilot`) fall back to the strict pattern.
+const TIMELINE_SPACED = /^\s*[-*]\s*(.+?)\s*(?::\s+|\s+[–—-]\s+)(.+)$/;
 const TIMELINE = /^\s*[-*]\s*([^:–—-]+)\s*[:–—-]\s*(.+)$/;
 
 export function parseDeck(source: string): Slide[] {
@@ -158,7 +162,7 @@ function parseCompare(kind: SlideKind, directives: Map<string, string>, lines: s
 function parseTimeline(kind: SlideKind, lines: string[]): TimelineItem[] | undefined {
 	if (kind !== 'timeline') return undefined;
 	const items = lines
-		.map((line) => line.match(TIMELINE))
+		.map((line) => line.match(TIMELINE_SPACED) ?? line.match(TIMELINE))
 		.filter((m): m is RegExpMatchArray => Boolean(m))
 		.map((m) => ({ label: cleanInline(m[1]), text: cleanInline(m[2]) }));
 	return items.length ? items : undefined;

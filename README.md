@@ -102,6 +102,8 @@ More in [`docs/architecture.md`](docs/architecture.md) and the [ADR index](docs/
 
 | I want to… | Read |
 |---|---|
+| write a deck and present it | [`docs/deck-syntax.md`](docs/deck-syntax.md), [`docs/live-sessions.md`](docs/live-sessions.md), [how-tos](docs/index.md#how-to-guides) |
+| script it over HTTP | [`docs/http-api.md`](docs/http-api.md) |
 | run it locally and make changes | [`docs/development.md`](docs/development.md), [`docs/scripts.md`](docs/scripts.md) |
 | host my own instance | [`docs/deployment.md`](docs/deployment.md), [`docs/operations.md`](docs/operations.md) |
 | understand the design | [`docs/architecture.md`](docs/architecture.md), [`docs/adr/`](docs/adr/README.md), [`docs/design-system.md`](docs/design-system.md) |
@@ -110,7 +112,7 @@ More in [`docs/architecture.md`](docs/architecture.md) and the [ADR index](docs/
 | review security and privacy | [`docs/security.md`](docs/security.md), [`docs/privacy.md`](docs/privacy.md) |
 | see what's next | [`ROADMAP.md`](ROADMAP.md), [`CHANGELOG.md`](CHANGELOG.md) |
 
-Tutorials: [first live session](docs/tutorials/manual-live-session.md) · [import to live room](docs/tutorials/import-to-live-room.md) · [create and launch via MCP](docs/tutorials/mcp-create-and-launch.md) · [replay to follow-up](docs/tutorials/replay-to-follow-up.md)
+Tutorials: [your first deck](docs/tutorials/first-deck.md) · [first live session](docs/tutorials/manual-live-session.md) · [import to live room](docs/tutorials/import-to-live-room.md) · [create and launch via MCP](docs/tutorials/mcp-create-and-launch.md) · [replay to follow-up](docs/tutorials/replay-to-follow-up.md)
 
 ### FAQ
 
