@@ -41,6 +41,7 @@ Start with the [README](../README.md) for what eigen.beam is and a two-minute qu
 2. [`adr/`](adr/README.md): the decisions behind it (SSE, in-memory rooms, cookie auth, content-first, single service, heavy work off the live path).
 3. [`design-system.md`](design-system.md): theme, type, chrome and viewer states.
 4. [`../ROADMAP.md`](../ROADMAP.md): what is shipped, what is next, what is out of scope.
+5. [`designs/oss-adoption.md`](designs/oss-adoption.md): the plan for the next phase and why.
 
 ### I want to connect an AI client
 
