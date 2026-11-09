@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { readFile, rm } from 'node:fs/promises';
 import { parseDeck, sanitizeImageUrl } from '../src/lib/deck-parse.ts';
-import { toPublicSlides } from '../src/lib/decks.ts';
+import { DECK_TEMPLATE, toPublicSlides } from '../src/lib/decks.ts';
 import { slideFitProfile } from '../src/lib/slide-quality.ts';
 import { applyQualityFix, deckReadyCheck } from '../src/lib/deck-quality.ts';
 import { MemoryDeckRepository, FileDeckRepository, PostgresDeckRepository } from '../src/lib/server/decks-repo.ts';
@@ -127,6 +127,21 @@ async function main() {
 		assert.equal(slides[1].compare?.rightTitle, 'Neu');
 		assert.equal(slides[2].timeline?.length, 2);
 		ok('Blocktypen number/compare/timeline + Reveal werden geparst');
+	}
+
+	// 8b) Timeline-Labels dürfen Doppelpunkte und Bindestriche enthalten
+	{
+		const [slide] = parseDeck('type: timeline\n# Ablauf\n- 00:15: Alle live\n- 2025 – Rollout\n- Kick-off - Start\n- Q1:Pilot\n- Done: Was fertig ist');
+		assert.deepEqual(slide.timeline, [
+			{ label: '00:15', text: 'Alle live' },
+			{ label: '2025', text: 'Rollout' },
+			{ label: 'Kick-off', text: 'Start' },
+			{ label: 'Q1', text: 'Pilot' },
+			{ label: 'Done', text: 'Was fertig ist' }
+		]);
+		const template = parseDeck(DECK_TEMPLATE).find((s) => s.kind === 'timeline');
+		assert.deepEqual(template?.timeline?.map((i) => i.label), ['00:00', '00:15', '05:00']);
+		ok('Timeline: Uhrzeit-Labels, gespaced Trenner, kompakte Fallback-Syntax');
 	}
 
 	// 9) Presenter notes werden für öffentliche Payloads entfernt

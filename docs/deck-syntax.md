@@ -151,8 +151,9 @@ type: timeline
 - Q3 – External customers
 ```
 
-- Each entry is a list line `- label: text`. The separator can be `:`, `-`, `–` or `—`.
-- **The label cannot contain `:` or any dash.** `- 09:30: Kick-off` parses as label `09` and text `30: Kick-off`. Write times as `- 9.30: Kick-off` or `- 9h30: Kick-off`.
+- Each entry is a list line `- label: text`.
+- The separator is a colon followed by a space (`: `) or a dash with spaces around it (` - `, ` – `, ` — `). The first such separator splits the line, so labels may contain colons and hyphens: `- 09:30: Kick-off` gives label `09:30`, `- Kick-off - Start` gives label `Kick-off`.
+- Compact entries without spaces (`- Q1:Pilot`) still work; there the label ends at the first `:` or dash.
 - If at least one entry parses, the body is not shown.
 
 ## Limits
