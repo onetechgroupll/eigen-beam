@@ -18,7 +18,7 @@ type McpToolsList = { tools?: McpTool[] };
 type McpStructured = { structuredContent?: Record<string, unknown> };
 
 const WRAPPER = env.EB_MCP_WRAPPER ?? './scripts/eigenbeam-mcp.sh';
-const HTTP_BASE = (env.EB_MCP_HTTP_BASE ?? env.EB_SMOKE_BASE ?? 'https://eigen-beam-production.up.railway.app').replace(/\/$/, '');
+const HTTP_BASE = (env.EB_MCP_HTTP_BASE ?? env.EB_SMOKE_BASE ?? 'http://127.0.0.1:4176').replace(/\/$/, '');
 const MUTATE = env.EB_MCP_SMOKE_MUTATE === '1';
 const EXPECTED_TOOLS = ['create_deck', 'get_deck', 'update_deck', 'create_room', 'upload_asset'];
 const REQUEST_TIMEOUT_MS = Number(env.EB_MCP_SMOKE_TIMEOUT_MS ?? 45_000);

@@ -20,7 +20,7 @@ The wrapper:
 
 - works for GUI apps that do not inherit an interactive shell PATH;
 - reads a bearer token from `EB_MCP_TOKEN` or an ignored local token file;
-- connects to the hosted `/mcp` endpoint;
+- connects to the `/mcp` endpoint from `EB_MCP_URL` or `.data/secrets/eigenbeam-mcp-url.txt` (default: local dev server);
 - never commits the token.
 
 Default ignored token file:
@@ -31,7 +31,7 @@ Default ignored token file:
 
 Create it locally as a single-line token when needed. Do not commit `.data/`.
 
-## Hermes / coding agents
+## Coding agents
 
 Follow `AGENTS.md` and the docs index. Important rules for agents:
 
@@ -60,7 +60,7 @@ Never commit:
 - `.data/`;
 - MCP token files;
 - provider API keys;
-- Railway/Postgres/S3 credentials.
+- database, bucket or mail credentials.
 
 Run:
 

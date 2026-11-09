@@ -14,10 +14,10 @@ All commands are run from the repository root.
 | `bun run preview` | Alias for `node build`. | Same as `start`. |
 | `bun run smoke:browser` | Browser smoke against `EB_SMOKE_BASE`. | Needs production server running. |
 | `bun run smoke:replay` | Replay/follow-up smoke against `EB_SMOKE_BASE`. | Needs production server running. |
-| `bun run smoke:ops` | Health/readiness/OAuth metadata smoke. | Defaults to production if `EB_SMOKE_BASE` is not set. |
+| `bun run smoke:ops` | Health/readiness/OAuth metadata smoke. | Defaults to `http://127.0.0.1:4176` if `EB_SMOKE_BASE` is not set. |
 | `bun run smoke:mcp` | Repo-local MCP wrapper smoke. | Mutating tool calls require `EB_MCP_SMOKE_MUTATE=1`. |
 | `bun run qa:mobile` | Mobile QA Lab. | Captures screenshots and `results.json`. |
-| `bun run watchdog:prod` | Production ops smoke. | Alias for `scripts/smoke-ops.ts`. |
+| `bun run watchdog:prod` | Ops smoke for a deployed instance. | Alias for `scripts/smoke-ops.ts`; set `EB_SMOKE_BASE`. |
 | `bun run db:migrate` | Run database migrations. | Requires `DATABASE_URL`. |
 
 ## Common env vars

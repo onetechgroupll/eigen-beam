@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { webkit, devices } from 'playwright';
 
-const BASE = process.env.EB_DESIGN_BASE ?? 'https://eigen-beam-production.up.railway.app';
+const BASE = process.env.EB_DESIGN_BASE ?? 'http://127.0.0.1:4176';
 const OUT = process.env.EB_DESIGN_OUT ?? `reports/live-design-review-${new Date().toISOString().replace(/[:.]/g, '-')}`;
 const SCREEN = path.join(OUT, 'screenshots');
 const device = devices['iPhone SE'];

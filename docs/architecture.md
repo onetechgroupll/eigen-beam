@@ -21,8 +21,8 @@ Presenter remote                │                         Viewer phones
 
 Durable stores:
 - Postgres: decks, replay sessions, events, follows
-- S3/Railway Buckets: images/assets
-- Resend: transactional mail
+- S3-compatible bucket: images/assets
+- Resend/Postmark: transactional mail
 - MCP: authenticated AI-client tool surface
 ```
 
@@ -55,7 +55,7 @@ SSE is preferred over WebSockets because native `EventSource` reconnect behavior
 | Decks | Postgres or local file store |
 | Replay sessions/events | Postgres or disabled/local modes |
 | Follow records | Postgres/file |
-| Assets | Local files or S3/Railway Buckets |
+| Assets | Local files or an S3-compatible bucket |
 | Live room current state | In-memory only |
 
 ## Public serializers
@@ -79,8 +79,10 @@ Public routes must use public-safe projections. They must not expose:
 
 ## Production dependencies
 
-- Railway app service for the Node process.
-- Railway Postgres for durable app data.
-- Railway Buckets/S3-compatible storage for assets.
-- Resend for production mail.
-- GitHub Actions for CI, Mobile QA and production watchdog.
+- One long-lived Node process (Docker image or any Node 22 host); see [ADR 0005](adr/0005-single-sveltekit-node-service.md).
+- Postgres for durable app data.
+- An S3-compatible bucket for assets (AWS S3, Cloudflare R2, MinIO, Railway Buckets, ...).
+- Resend or Postmark for mail.
+- GitHub Actions for CI, Mobile QA and the optional deployment watchdog.
+
+The reference instance runs on Railway. Setup for your own host: [`deployment.md`](deployment.md). Decisions behind this design: [`adr/`](adr/README.md).

@@ -127,7 +127,7 @@ It uploads the mobile QA report and screenshots as an artifact.
 
 ### Production Watchdog
 
-`.github/workflows/production-watchdog.yml` runs on a credit-conscious schedule and checks:
+`.github/workflows/production-watchdog.yml` runs every two hours when the repository variable `EB_WATCHDOG_URL` is set (skipped otherwise, so forks stay quiet) and checks:
 
 - `/healthz`;
 - `/readyz`;

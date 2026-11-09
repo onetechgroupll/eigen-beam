@@ -1,72 +1,69 @@
-# eigen.beam Documentation Index
+# eigen.beam documentation
 
-This directory contains product, architecture, operations and integration documentation for eigen.beam.
+Start with the [README](../README.md) for what eigen.beam is and a two-minute quickstart.
 
-## Fast paths
+## Reading paths
 
-### I want to understand the product
+### I want to run it and change it
 
-1. [`../README.md`](../README.md) — GitHub landing page and quickstart.
-2. [`eigenbeam-design-2026-06-28.md`](eigenbeam-design-2026-06-28.md) — product rationale, constraints and architecture decisions.
-3. [`eigenbeam-roadmap-2026-06-28.md`](eigenbeam-roadmap-2026-06-28.md) — implementation status and roadmap history.
+1. [`development.md`](development.md): first ten minutes, daily loop, reset and recovery.
+2. [`scripts.md`](scripts.md): every script and the env vars it reads.
+3. [`testing.md`](testing.md): typecheck, build, smokes and mobile QA.
+4. [`troubleshooting.md`](troubleshooting.md): common local, CI, deployment, MCP and WebKit issues.
+5. [`../CONTRIBUTING.md`](../CONTRIBUTING.md): how to open a good pull request.
 
-### I want to run or verify the app
+### I want to host my own instance
 
-1. [`development.md`](development.md) — first 10 minutes, daily loop, reset/recovery and CI-credit discipline.
-2. [`scripts.md`](scripts.md) — script reference and common env vars.
-3. [`testing.md`](testing.md) — check/build/smoke/mobile QA commands.
-4. [`qa.md`](qa.md) — curated screenshots, QA evidence and manual review checklist.
-5. [`troubleshooting.md`](troubleshooting.md) — common local, CI, Railway, MCP and WebKit issues.
-6. [`eigenbeam-ops.md`](eigenbeam-ops.md) — health/readiness endpoints and production watchdog.
-7. [`deployment.md`](deployment.md) — Railway production setup.
+1. [`deployment.md`](deployment.md): Docker, Railway and other hosts; minimal vs. production mode; full env reference.
+2. [`operations.md`](operations.md): `/healthz`, `/readyz`, smokes and the watchdog.
+3. [`security.md`](security.md) and [`privacy.md`](privacy.md): what a public instance exposes and stores.
 
-### I want to connect an AI/MCP client
+### I want to understand the design
 
-1. [`eigenbeam-mcp.md`](eigenbeam-mcp.md) — hosted MCP endpoint, auth and tools.
-2. [`eigenbeam-mcp-claude-setup.md`](eigenbeam-mcp-claude-setup.md) — Claude Code project-scoped setup.
-3. [`editor-and-agent-setup.md`](editor-and-agent-setup.md) — editor, Claude/Hermes and local token setup.
+1. [`architecture.md`](architecture.md): system diagram, live-room model, stores and auth boundaries.
+2. [`adr/`](adr/README.md): the decisions behind it (SSE, in-memory rooms, cookie auth, content-first, single service, heavy work off the live path).
+3. [`design-system.md`](design-system.md): theme, type, chrome and viewer states.
+4. [`../ROADMAP.md`](../ROADMAP.md): what is shipped, what is next, what is out of scope.
 
-### I want to review security/public surfaces
+### I want to connect an AI client
 
-1. [`security.md`](security.md) — app-specific security model and invariants.
-2. [`privacy.md`](privacy.md) — data-use and privacy notes.
-3. [`../SECURITY.md`](../SECURITY.md) — repository-level security policy.
-4. [`eigenbeam-ops.md`](eigenbeam-ops.md) — secret-safe readiness payloads.
+1. [`mcp.md`](mcp.md): endpoint, auth, scopes and tools.
+2. [`mcp-claude-code.md`](mcp-claude-code.md): project-scoped Claude Code setup.
+3. [`editor-and-agent-setup.md`](editor-and-agent-setup.md): editor and coding-agent conventions for this repo.
 
-### I want a tutorial or example
+### Tutorials and examples
 
-1. [`tutorials/manual-live-session.md`](tutorials/manual-live-session.md) — run the core presenter/viewer flow.
-2. [`tutorials/import-to-live-room.md`](tutorials/import-to-live-room.md) — import content and launch a room.
-3. [`tutorials/mcp-create-and-launch.md`](tutorials/mcp-create-and-launch.md) — use MCP to create and launch a deck.
-4. [`tutorials/replay-to-follow-up.md`](tutorials/replay-to-follow-up.md) — use replay artifacts for follow-up.
-5. [`../examples/`](../examples/) — example decks and MCP payloads.
+1. [`tutorials/manual-live-session.md`](tutorials/manual-live-session.md): run the core presenter/viewer flow.
+2. [`tutorials/import-to-live-room.md`](tutorials/import-to-live-room.md): import content and launch a room.
+3. [`tutorials/mcp-create-and-launch.md`](tutorials/mcp-create-and-launch.md): create and launch a deck via MCP.
+4. [`tutorials/replay-to-follow-up.md`](tutorials/replay-to-follow-up.md): turn a replay into follow-up material.
+5. [`../examples/`](../examples/): example decks and MCP payloads; see [`fixtures.md`](fixtures.md).
 
-## Current docs
+## All documents
 
 | File | Purpose |
 |---|---|
-| [`development.md`](development.md) | First-10-minutes setup, daily dev loop and CI-credit discipline. |
-| [`scripts.md`](scripts.md) | Script reference and env var map. |
-| [`editor-and-agent-setup.md`](editor-and-agent-setup.md) | Claude/Hermes/MCP/editor setup. |
-| [`fixtures.md`](fixtures.md) | Example decks, MCP payloads and fixture rules. |
-| [`architecture.md`](architecture.md) | System diagram, live-room model, durable stores and auth boundaries. |
-| [`testing.md`](testing.md) | Local, CI, smoke and mobile QA verification. |
-| [`deployment.md`](deployment.md) | Railway deployment, production env and migration checklist. |
-| [`security.md`](security.md) | Public surfaces, auth model, MCP security and disclosure process. |
-| [`privacy.md`](privacy.md) | Data-use, PII and provider/MCP privacy notes. |
-| [`troubleshooting.md`](troubleshooting.md) | Common local/CI/production/MCP issues and fixes. |
-| [`qa.md`](qa.md) | Curated mobile screenshots and manual QA checklist. |
-| [`eigenbeam-ops.md`](eigenbeam-ops.md) | `/healthz`, `/readyz` and production watchdog. |
-| [`eigenbeam-mcp.md`](eigenbeam-mcp.md) | MCP endpoint, tools, scopes and examples. |
-| [`eigenbeam-mcp-claude-setup.md`](eigenbeam-mcp-claude-setup.md) | Claude Code Mac App setup. |
-| [`eigenbeam-design-2026-06-28.md`](eigenbeam-design-2026-06-28.md) | Original product/design/architecture brief. |
-| [`eigenbeam-roadmap-2026-06-28.md`](eigenbeam-roadmap-2026-06-28.md) | Roadmap and implementation status matrix. |
+| [`development.md`](development.md) | Setup, daily loop, CI-friendly habits |
+| [`scripts.md`](scripts.md) | Script and env var reference |
+| [`testing.md`](testing.md) | Local, CI, smoke and mobile QA verification |
+| [`qa.md`](qa.md) | README screenshots and manual QA checklist |
+| [`troubleshooting.md`](troubleshooting.md) | Common issues and fixes |
+| [`deployment.md`](deployment.md) | Self-hosting guide and production env |
+| [`operations.md`](operations.md) | Health, readiness, smokes, watchdog |
+| [`architecture.md`](architecture.md) | System design and boundaries |
+| [`adr/`](adr/README.md) | Architecture decision records |
+| [`design-system.md`](design-system.md) | Visual language and viewer states |
+| [`security.md`](security.md) | Public surfaces, auth model, invariants, reporting |
+| [`privacy.md`](privacy.md) | Data use, PII, providers |
+| [`mcp.md`](mcp.md) | MCP endpoint and tools |
+| [`mcp-claude-code.md`](mcp-claude-code.md) | Claude Code setup |
+| [`editor-and-agent-setup.md`](editor-and-agent-setup.md) | Editor and coding-agent setup |
+| [`fixtures.md`](fixtures.md) | Example decks and fixture rules |
 
-## Documentation conventions
+## Conventions
 
-- Keep the README as the public/front-door summary.
-- Keep deep implementation rationale in `docs/`.
-- Keep secrets out of examples; use variable names and redacted placeholders only.
-- Update [`testing.md`](testing.md) whenever scripts or GitHub Actions gates change.
-- Update [`development.md`](development.md) or [`scripts.md`](scripts.md) whenever local setup/scripts change.
-- Update [`deployment.md`](deployment.md) whenever Railway env, migrations or durable backend requirements change.
+- The README is the front door; depth lives in `docs/`.
+- A new architectural decision gets an ADR in the same PR.
+- No secrets in docs or examples: variable names and placeholders only.
+- Changing scripts or CI gates means updating [`testing.md`](testing.md) and [`scripts.md`](scripts.md); changing env or migrations means updating [`deployment.md`](deployment.md) and `.env.example`.
+- Run `bun run docs:check` before pushing doc changes.

@@ -4,6 +4,12 @@ This project does not currently publish formal versioned releases. This changelo
 
 ## Unreleased / current main
 
+- Open-sourced under the MIT License.
+- New README with animated graphics (`tools/readme/build.py`), self-hosting guide, `Dockerfile` and English documentation throughout.
+- Architecture decision records (`docs/adr/`), public `ROADMAP.md` and `docs/design-system.md` replace the internal design and roadmap briefs.
+- Smoke, QA and MCP scripts default to a local instance instead of the reference deployment; the MCP wrapper reads its endpoint from `EB_MCP_URL` or `.data/secrets/eigenbeam-mcp-url.txt`.
+- The deployment watchdog targets the repository variable `EB_WATCHDOG_URL` and is skipped without it.
+
 - Added top-level GitHub documentation: README, docs index, testing/deployment/security guides, contribution/security policies and GitHub templates.
 - Added CI workflow for check, repository verification, build, local production browser/replay/ops smokes.
 - Added manual Mobile QA Lab GitHub workflow with mobile screenshot/report artifacts.

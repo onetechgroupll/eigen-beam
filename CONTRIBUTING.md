@@ -1,6 +1,23 @@
 # Contributing
 
-Contributions are welcome. Changes follow a production-grade workflow.
+Thanks for helping. eigen.beam is a small project with a clear product line, so a short conversation first saves everyone time.
+
+## Before you start
+
+- **Bugs:** open an issue with steps to reproduce, the device/browser and what you expected.
+- **Small fixes and docs:** send a pull request directly.
+- **Features:** open an issue first. Check [`ROADMAP.md`](ROADMAP.md): items under "Next" are welcome, items under "Not building" will be declined. Architectural changes need an ADR in [`docs/adr/`](docs/adr/README.md).
+- **Good first issues** are labelled [`good first issue`](https://github.com/onetechgroupll/eigen-beam/labels/good%20first%20issue). Internationalisation of the German UI is the biggest open one.
+- **Security issues:** never as a public issue; see [`SECURITY.md`](SECURITY.md).
+
+## Workflow
+
+1. Fork the repository and create a branch from `main`.
+2. Make a focused change; avoid drive-by refactors.
+3. Run the gates below and describe what you ran in the PR.
+4. Open a pull request against `main`. CI runs the docs check and, for app changes, typecheck, verification, build and browser/replay/ops smokes.
+
+By contributing you agree that your contribution is licensed under the [MIT License](LICENSE).
 
 ## Setup
 
@@ -67,6 +84,7 @@ Update docs when behavior changes:
 - `README.md` for user/developer-facing entry points;
 - `docs/development.md` and `docs/scripts.md` for local DevEx/script changes;
 - `docs/testing.md` for scripts and CI gates;
-- `docs/deployment.md` for env/deploy changes;
+- `docs/deployment.md` and `.env.example` for env/deploy changes;
 - `docs/security.md` for auth/public-surface changes;
-- `docs/eigenbeam-roadmap-2026-06-28.md` for status matrix changes.
+- `ROADMAP.md` when you ship or drop a roadmap item;
+- `docs/adr/` for architectural decisions.
