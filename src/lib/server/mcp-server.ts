@@ -4,6 +4,7 @@ import * as z from 'zod/v4';
 import type { Deck } from '$lib/decks';
 import { buildDeckInput } from '$lib/server/deck-input';
 import { sniffImage, storeAsset } from '$lib/server/assets';
+import { DECK_CLAIM_PARAM, deckClaimToken } from '$lib/server/deck-access';
 import { getDeckRepo } from '$lib/server/decks-repo';
 import { createRoom } from '$lib/server/rooms';
 
@@ -50,7 +51,7 @@ export function createEigenbeamMcpServer(baseUrl: string): McpServer {
 		inputSchema: {
 			title: z.string().max(120).describe('Internal deck title.'),
 			source: z.string().max(50_000).describe(`Deck Markdown. ${MCP_DECK_AUTHORING_GUIDANCE}`),
-			claimable: z.boolean().default(true).describe('Keep the deck unowned so the first browser editor can claim it. Defaults to true.')
+			claimable: z.boolean().default(true).describe('Keep the deck unowned; opening the returned editUrl (it carries a signed claim token) makes that browser the owner. Defaults to true.')
 		},
 		outputSchema: {
 			id: z.string(),
@@ -70,8 +71,8 @@ export function createEigenbeamMcpServer(baseUrl: string): McpServer {
 	}, async ({ title, source }): Promise<{ content: Array<{ type: 'text'; text: string }>; structuredContent: McpDeckResult }> => {
 		const parsed = buildDeckInput({ title, source });
 		if (!parsed.ok) throw new Error(parsed.message);
-		// MCP-created decks are intentionally unowned. The first browser editor that
-		// saves the deck can claim it via the existing edit/update flow.
+		// MCP-created decks are intentionally unowned. Only the browser that opens
+		// the signed editUrl (?claim=…) becomes the owner; nobody else can edit it.
 		const deck = await getDeckRepo().create(parsed.input, null);
 		const result = toMcpDeckResult(deck, baseUrl);
 		return {
@@ -270,10 +271,17 @@ function toMcpDeckResult(deck: Deck, baseUrl: string): McpDeckResult {
 		id: deck.id,
 		title: deck.title,
 		slideCount: deck.slides.length,
-		editUrl: absoluteUrl(baseUrl, `/edit/${deck.id}`),
+		editUrl: deckEditUrl(deck, baseUrl),
 		deckApiUrl: absoluteUrl(baseUrl, `/api/decks/${deck.id}`),
 		newRoomApiUrl: absoluteUrl(baseUrl, '/api/rooms')
 	};
+}
+
+/** Unowned decks get the signed claim link; owned decks the plain editor URL. */
+export function deckEditUrl(deck: Deck, baseUrl: string): string {
+	const url = new URL(`/edit/${deck.id}`, baseUrl);
+	if (!deck.ownerId) url.searchParams.set(DECK_CLAIM_PARAM, deckClaimToken(deck.id));
+	return url.toString();
 }
 
 function absoluteUrl(baseUrl: string, path: string): string {

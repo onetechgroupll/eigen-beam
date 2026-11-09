@@ -41,6 +41,8 @@ This document captures eigen.beam's security-relevant surfaces and invariants.
 
 `create_room` returns viewer/replay links only. It intentionally does not return presenter URLs or tokens.
 
+Decks created via `create_deck` have no owner. Over HTTP nobody has edit access to them (no `source`, no speaker notes, no update, upload, delete or room start) until someone opens the `editUrl`. That URL carries an HMAC claim token over the deck id, signed with `EB_MAGIC_LINK_SECRET`; opening it makes the browser's actor the owner in one atomic `owner_id IS NULL` update, then redirects to the URL without the token. The token only matters while the deck is unowned. MCP tools themselves are not owner-scoped: any token with `deck:read` can read any deck by id, including its source and notes.
+
 ## Data and PII policy
 
 - Viewer event/stats payloads are designed to avoid PII.

@@ -34,7 +34,8 @@ import { buildSessionSummary } from '../src/lib/session-summary.ts';
 import { buildSlideHeatmap } from '../src/lib/slide-heatmap.ts';
 import { buildDeckV2Draft } from '../src/lib/deck-v2-draft.ts';
 import { buildSessionCoach } from '../src/lib/session-coach.ts';
-import { MCP_DECK_AUTHORING_GUIDANCE, mcpImageFileFromBase64, toMcpAssetResult, toMcpDeckReadResult, toMcpRoomResult } from '../src/lib/server/mcp-server.ts';
+import { canEditDeck, canViewDeck, deckClaimToken, isValidDeckClaimToken } from '../src/lib/server/deck-access.ts';
+import { MCP_DECK_AUTHORING_GUIDANCE, deckEditUrl, mcpImageFileFromBase64, toMcpAssetResult, toMcpDeckReadResult, toMcpRoomResult } from '../src/lib/server/mcp-server.ts';
 import { isMcpBearerAuthorized, mcpAuthContextFromHeader, mcpBearerTokensFromEnv, mcpHasScopes } from '../src/lib/server/mcp-auth.ts';
 import { mcpProtectedResourceMetadata, mcpUnauthorizedHeaders } from '../src/lib/server/mcp-oauth.ts';
 import { createOAuthAccessToken, oauthAuthorizationServerMetadata, parseOAuthClients, requestedOAuthScopes, verifyOAuthAccessToken } from '../src/lib/server/oauth-server.ts';
@@ -429,6 +430,52 @@ Kurz.`;
 		assert.equal(mcpRead.editUrl, `https://example.test/edit/${newer.id}`);
 		ok('MCP get_deck Ergebnis enthält autorisierte Source + stabile Links');
 
+		// Unowned (MCP-)Decks: kein Editor ohne Claim-Link, Notes/Source an niemanden.
+		{
+			const claimRepo = new MemoryDeckRepository();
+			const unowned = await claimRepo.create({ title: 'MCP', source: '# A\nnotes: geheim', slides: parseDeck('# A\nnotes: geheim') }, null);
+			assert.equal(canEditDeck(unowned, null), false);
+			assert.equal(canEditDeck(unowned, 'stranger'), false);
+			assert.equal(canViewDeck(unowned, { actorId: null, teamId: null }), true);
+			ok('Unowned Deck: niemand darf editieren (PUT/Assets/Rooms/Notes), öffentliche Slides bleiben wie Link-Sharing sichtbar');
+
+			const token = deckClaimToken(unowned.id, 'test-secret');
+			assert.equal(isValidDeckClaimToken(unowned.id, token, 'test-secret'), true);
+			assert.equal(isValidDeckClaimToken(unowned.id, token, 'other-secret'), false);
+			assert.equal(isValidDeckClaimToken('otherdeck1', token, 'test-secret'), false);
+			assert.equal(isValidDeckClaimToken(unowned.id, token.slice(0, -1), 'test-secret'), false);
+			assert.equal(isValidDeckClaimToken(unowned.id, '', 'test-secret'), false);
+			assert.equal(isValidDeckClaimToken(unowned.id, null, 'test-secret'), false);
+			ok('Claim-Token ist an Deck-ID + Secret gebunden, Fälschungen/Kürzungen scheitern');
+
+			const editUrl = new URL(deckEditUrl(unowned, 'https://example.test'));
+			assert.equal(editUrl.pathname, `/edit/${unowned.id}`);
+			assert.equal(isValidDeckClaimToken(unowned.id, editUrl.searchParams.get('claim')), true);
+			ok('MCP editUrl für unowned Decks trägt einen gültigen Claim-Token');
+
+			const claimedDeck = await claimRepo.claimUnowned(unowned.id, 'claimer-1');
+			assert.equal(claimedDeck?.ownerId, 'claimer-1');
+			assert.equal(canEditDeck(claimedDeck!, 'claimer-1'), true);
+			assert.equal(canEditDeck(claimedDeck!, 'stranger'), false);
+			assert.equal(canViewDeck(claimedDeck!, { actorId: 'stranger', teamId: null }), false);
+			assert.equal(await claimRepo.claimUnowned(unowned.id, 'stranger'), null);
+			assert.equal((await claimRepo.get(unowned.id))?.ownerId, 'claimer-1');
+			assert.equal(deckEditUrl(claimedDeck!, 'https://example.test'), `https://example.test/edit/${unowned.id}`);
+			ok('claimUnowned() übernimmt genau einmal; danach privat, Fremd-Claim scheitert, editUrl ohne Token');
+
+			const fileDir = '.data/verify-claim-' + Date.now();
+			const fileRepo = new FileDeckRepository(fileDir);
+			try {
+				const fd = await fileRepo.create({ title: 'F', source: '# F', slides: parseDeck('# F') }, null);
+				assert.equal((await fileRepo.claimUnowned(fd.id, 'f-owner'))?.ownerId, 'f-owner');
+				assert.equal(await fileRepo.claimUnowned(fd.id, 'f-other'), null);
+				assert.equal((await fileRepo.get(fd.id))?.ownerId, 'f-owner');
+			} finally {
+				await rm(fileDir, { recursive: true, force: true });
+			}
+			ok('FileDeckRepository.claimUnowned() persistiert und claimt nur einmal');
+		}
+
 		assert.match(MCP_DECK_AUTHORING_GUIDANCE, /9:16|vertikal/i);
 		assert.match(MCP_DECK_AUTHORING_GUIDANCE, /Eine Idee pro Slide/);
 		assert.match(MCP_DECK_AUTHORING_GUIDANCE, /≤15 Slides/);
@@ -595,6 +642,12 @@ Kurz.`;
 		const mcpUpdateCall = calls.find((c) => c.sql.includes('UPDATE decks') && c.params[3] === null);
 		assert.ok(mcpUpdateCall, 'MCP/service update with null claimer should be allowed for unowned decks by SQL');
 		ok('Postgres update() erlaubt null-Claimer nur für unowned Decks ohne Owner-Claim');
+
+		await repo.claimUnowned('pg1234', 'claimer-pg');
+		const claimCall = calls.find((c) => c.sql.includes('UPDATE decks') && c.sql.includes('owner_id IS NULL') && c.params[0] === 'claimer-pg');
+		assert.match(claimCall?.sql ?? '', /WHERE id = \$3 AND owner_id IS NULL/);
+		assert.equal(await repo.claimUnowned('../bad', 'x'), null);
+		ok('Postgres claimUnowned() setzt den Owner nur bei owner_id IS NULL');
 
 		const listed = await repo.listByOwner('user-a');
 		assert.equal(listed[0]?.id, 'pg1234');

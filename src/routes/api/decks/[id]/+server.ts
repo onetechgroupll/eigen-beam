@@ -7,7 +7,8 @@ import { getActorId } from '$lib/server/identity';
 import { buildDeckInput } from '$lib/server/deck-input';
 import { clientRateLimitKey, rateLimit, RATE_LIMITS } from '$lib/server/rate-limit';
 
-// GET /api/decks/:id — public-safe Deck. Raw source + speaker notes nur für Owner.
+// GET /api/decks/:id — public-safe Deck. Raw source + speaker notes nur für den
+// Owner; ein unowned Deck hat keinen, also bekommt dort niemand Notes/Source.
 export const GET: RequestHandler = async ({ params, cookies }) => {
 	if (!isValidDeckId(params.id)) return json({ error: 'not_found' }, { status: 404 });
 	const deck = await getDeckRepo().get(params.id);
@@ -24,8 +25,8 @@ export const GET: RequestHandler = async ({ params, cookies }) => {
 	});
 };
 
-// PUT /api/decks/:id — Update. Nur der Creator (Cookie) darf ändern; ein noch
-// ungeclaimtes Deck (ownerId null) wird vom ersten Editor übernommen.
+// PUT /api/decks/:id — Update. Nur der Owner darf ändern. Ein unowned Deck muss
+// erst über den signierten Claim-Link (/edit/:id?claim=…) übernommen werden.
 export const PUT: RequestHandler = async ({ params, request, cookies, getClientAddress }) => {
 	const limited = rateLimit(clientRateLimitKey('deck-write', getClientAddress, params.id), RATE_LIMITS.deckWrite);
 	if (limited) return limited;
@@ -49,7 +50,7 @@ export const PUT: RequestHandler = async ({ params, request, cookies, getClientA
 };
 
 // DELETE /api/decks/:id — nur Owner darf löschen. Unowned MCP-Decks müssen erst
-// durch Speichern im Editor geclaimt werden, damit nicht jeder Browser löschen kann.
+// über den Claim-Link übernommen werden, damit nicht jeder Browser löschen kann.
 export const DELETE: RequestHandler = async ({ params, cookies, getClientAddress }) => {
 	const limited = rateLimit(clientRateLimitKey('deck-write', getClientAddress, params.id), RATE_LIMITS.deckWrite);
 	if (limited) return limited;

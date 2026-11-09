@@ -34,6 +34,8 @@ export interface DeckRepository {
 	listByTeam(teamId: string, excludeOwnerId?: string | null): Promise<Deck[]>;
 	setSharing(id: string, input: DeckSharingInput, ownerId: string): Promise<Deck | null>;
 	claimOwner(fromOwnerId: string, toOwnerId: string): Promise<number>;
+	/** Setzt den Owner eines unowned Decks atomar. null, wenn das Deck fehlt oder schon einen Owner hat. */
+	claimUnowned(id: string, ownerId: string): Promise<Deck | null>;
 }
 
 export type SqlClient = {
@@ -135,6 +137,16 @@ export class MemoryDeckRepository implements DeckRepository {
 			count++;
 		}
 		return count;
+	}
+
+	async claimUnowned(id: string, ownerId: string): Promise<Deck | null> {
+		const d = this.map.get(id);
+		if (!d || d.ownerId) return null;
+		d.ownerId = ownerId;
+		d.visibility ??= 'private';
+		d.teamId ??= null;
+		d.updatedAt = nowMs();
+		return clone(d);
 	}
 }
 
@@ -251,6 +263,14 @@ export class FileDeckRepository implements DeckRepository {
 			await this.write(d);
 		}
 		return decks.length;
+	}
+
+	async claimUnowned(id: string, ownerId: string): Promise<Deck | null> {
+		const existing = await this.get(id);
+		if (!existing || existing.ownerId) return null;
+		const deck: Deck = { ...existing, ownerId, updatedAt: nowMs() };
+		await this.write(deck);
+		return deck;
 	}
 
 	async delete(id: string): Promise<boolean> {
@@ -370,6 +390,20 @@ export class PostgresDeckRepository implements DeckRepository {
 			[toOwnerId, this.clock(), fromOwnerId]
 		);
 		return result.rows.length;
+	}
+
+	async claimUnowned(id: string, ownerId: string): Promise<Deck | null> {
+		if (!isValidDeckId(id)) return null;
+		const result = await this.db.query(
+			`UPDATE decks
+			 SET owner_id = $1,
+			     visibility = COALESCE(visibility, 'private'),
+			     updated_at = $2
+			 WHERE id = $3 AND owner_id IS NULL
+			 RETURNING id, owner_id, title, source, slides, visibility, team_id, created_at, updated_at`,
+			[ownerId, this.clock(), id]
+		);
+		return result.rows[0] ? rowToDeck(result.rows[0]) : null;
 	}
 }
 

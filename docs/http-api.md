@@ -27,13 +27,13 @@ The **actor** is the signed-in user, or else the anonymous creator. A script kee
 
 | | Owner | Anyone else |
 |---|---|---|
-| Edit, upload, start a room | yes | only if the deck has no owner yet (decks created via MCP); the first editor claims it |
+| Edit, upload, start a room | yes | no |
 | Delete | yes | no |
-| View, export, clone | yes | `link`: yes · `team`: signed-in users of the same email domain · `private`: no |
+| View, export, clone | yes | `link`: yes · `team`: signed-in users of the same email domain · `private`: no · no owner yet: yes |
 
 New decks are `private`. Speaker notes and the raw `source` are returned only to callers with edit access.
 
-> **Unowned decks are open.** A deck created via MCP has no owner until someone saves it in the editor. Until then every caller counts as an editor: anyone with the ID can read its `source` and speaker notes, update it, upload to it and start rooms with it, regardless of visibility. Claim the deck (open and save it in the editor) before adding anything confidential.
+**Decks without an owner.** A deck created via MCP has no owner until it is claimed. Until then nobody has edit access over HTTP: no caller gets its `source` or speaker notes, and nobody can update it, upload to it, delete it or start a room with it. Its public slides behave like a `link` deck. To claim it, open the `editUrl` from the MCP response: it carries a signed `?claim=` token, and the browser that opens it becomes the owner and is redirected to the plain `/edit/:id`. Opening `/edit/:id` without a valid token returns `403`. Treat the `editUrl` like a password until it has been opened. `get_deck` returns a fresh claim link for decks that are still unowned.
 
 ## Decks
 
@@ -64,7 +64,7 @@ curl -c jar -b jar -X POST https://beam.example.com/api/decks \
 
 ### Update a deck
 
-`PUT /api/decks/:id` · limit 40 / 10 min per deck. Same body and limits as create. Owner only (or the first editor of an unowned deck). → `{ id, title, slides, updatedAt }`.
+`PUT /api/decks/:id` · limit 40 / 10 min per deck. Same body and limits as create. Owner only; unowned decks must be claimed first. → `{ id, title, slides, updatedAt }`.
 
 ### Delete a deck
 
