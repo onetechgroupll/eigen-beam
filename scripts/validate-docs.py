@@ -19,6 +19,7 @@ MD_GLOBS = [
     "docs/*.md",
     "docs/tutorials/*.md",
     "docs/how-to/*.md",
+    "docs/designs/*.md",
     "docs/adr/*.md",
     "examples/*.md",
     ".github/pull_request_template.md",

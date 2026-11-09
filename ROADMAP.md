@@ -18,7 +18,7 @@ eigen.beam is a working product: the core live flow, authoring, audience signals
 
 ## Next
 
-Good places to contribute, roughly in order of impact:
+The plan behind this list, with waves and reasoning, is in [`docs/designs/oss-adoption.md`](docs/designs/oss-adoption.md). Good places to contribute, roughly in order of impact:
 
 - **Internationalisation.** The UI is German. Extract strings, add English, pick the language from the browser.
 - **Up-to-date AI defaults.** Refresh the default Claude model and make provider settings easier to discover.
