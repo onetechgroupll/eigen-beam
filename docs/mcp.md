@@ -38,7 +38,7 @@ EB_OAUTH_TOKEN_SECRET=...
 EB_OAUTH_CLIENTS=client-id:client-secret|deck:read+room:create
 ```
 
-`EB_OAUTH_CLIENTS` takes comma- or newline-separated entries. Scopes are limited to `deck:read`, `deck:write`, `room:create` and `asset:upload`. `POST /oauth/token` accepts `application/x-www-form-urlencoded` and `application/json` bodies.
+`EB_OAUTH_CLIENTS` takes comma- or newline-separated entries. Scopes are limited to `deck:read`, `deck:write`, `room:create` and `asset:upload`. An entry without `|` gets all scopes. An entry with `|` must list only valid scopes: an empty list or an unknown scope (a typo such as `deck:raed`) drops that entry with a warning in the server log, instead of widening it to full access. The same rule applies to `token|scopes` entries in `EB_MCP_TOKENS`. `POST /oauth/token` accepts `application/x-www-form-urlencoded` and `application/json` bodies.
 
 ## Tools
 
