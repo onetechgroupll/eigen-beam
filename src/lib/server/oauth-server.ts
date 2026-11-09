@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { MCP_SUPPORTED_SCOPES } from './mcp-oauth';
 import type { McpScope } from './mcp-auth';
+import { warnInvalidEntry } from './config-warnings';
 
 type EnvLike = Record<string, string | undefined>;
 
@@ -43,15 +44,20 @@ export function parseOAuthClients(raw: string | undefined): OAuthClient[] {
 		.split(/[\n\r,]+/)
 		.map((entry) => entry.trim())
 		.filter(Boolean)
-		.map((entry) => {
+		.map((entry, index) => {
 			const [credentialPart, scopesPart] = entry.split('|', 2);
 			const separator = credentialPart.indexOf(':');
 			if (separator <= 0) return null;
 			const clientId = credentialPart.slice(0, separator).trim();
 			const clientSecret = credentialPart.slice(separator + 1).trim();
 			if (!clientId || !clientSecret) return null;
-			const scopes = parseOAuthScopes(scopesPart);
-			return { clientId, clientSecret, scopes: scopes.length ? scopes : [...MCP_SUPPORTED_SCOPES] as McpScope[] };
+			// No `|` means all supported scopes. With `|`, a typo must fail closed.
+			const scopes = scopesPart === undefined ? ([...MCP_SUPPORTED_SCOPES] as McpScope[]) : parseOAuthScopes(scopesPart);
+			if (!scopes) {
+				warnInvalidEntry('EB_OAUTH_CLIENTS', index);
+				return null;
+			}
+			return { clientId, clientSecret, scopes };
 		})
 		.filter((client): client is OAuthClient => Boolean(client));
 }
@@ -94,8 +100,8 @@ export function verifyOAuthAccessToken(token: string, secret: string | undefined
 	const payload = decodePayload(parts[1]);
 	if (!payload || payload.iss !== 'eigenbeam' || payload.aud !== 'mcp') return null;
 	if (!Number.isFinite(payload.exp) || payload.exp <= now) return null;
-	const scopes = parseOAuthScopes(payload.scope);
-	if (!scopes.length) return null;
+	const scopes = typeof payload.scope === 'string' ? parseOAuthScopes(payload.scope) : null;
+	if (!scopes) return null;
 	return { clientId: payload.sub, scopes, expiresAt: payload.exp, issuedAt: payload.iat };
 }
 
@@ -121,11 +127,11 @@ function parseRequestedOAuthScopes(raw: string | undefined): McpScope[] | null {
 	return tokens as McpScope[];
 }
 
-function parseOAuthScopes(raw: string | undefined): McpScope[] {
-	return (raw ?? '')
-		.split(/[+\s]+/)
-		.map((scope) => scope.trim() as McpScope)
-		.filter((scope) => ALLOWED_SCOPES.has(scope));
+/** Strict scope list: null when it is empty or contains anything unknown. */
+function parseOAuthScopes(raw: string): McpScope[] | null {
+	const scopes = raw.split(/[+\s]+/).map((scope) => scope.trim()).filter(Boolean);
+	if (!scopes.length || !scopes.every((scope) => ALLOWED_SCOPES.has(scope as McpScope))) return null;
+	return scopes as McpScope[];
 }
 
 function sign(value: string, secret: string): string {

@@ -128,6 +128,7 @@ Scopes: `deck:read`, `deck:write`, `room:create`, `asset:upload`. See [`mcp.md`]
 
 ```text
 ANTHROPIC_API_KEY=...    # clarity pass and import re-layout; local fallback without it
+EB_CLAUDE_MODEL=...      # optional, default claude-opus-5-5 (src/lib/server/claude.ts)
 OPENAI_API_KEY=...       # voice-to-slides transcription
 ```
 

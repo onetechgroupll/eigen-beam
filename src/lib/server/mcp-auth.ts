@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { env } from 'node:process';
 import { verifyOAuthAccessToken } from './oauth-server';
+import { warnInvalidEntry } from './config-warnings';
 
 export type McpScope = '*' | 'deck:read' | 'deck:write' | 'room:create' | 'asset:upload';
 export type McpAuthContext = { token: string; scopes: McpScope[] };
@@ -30,14 +31,20 @@ export function mcpAuthContextsFromEnv(source: Record<string, string | undefined
 		seen.add(token);
 		contexts.push({ token, scopes: ['*'] });
 	}
-	for (const raw of splitTokens(source.EB_MCP_TOKENS)) {
+	splitTokens(source.EB_MCP_TOKENS).forEach((raw, index) => {
 		const [tokenPart, scopesPart] = raw.split('|', 2);
 		const token = tokenPart.trim();
-		if (!token || seen.has(token)) continue;
+		if (!token || seen.has(token)) return;
+		// No `|` means full access (documented). With `|`, every scope must be
+		// valid: a typo must fail closed, never widen to full access.
+		const scopes = scopesPart === undefined ? (['*'] as McpScope[]) : parseScopes(scopesPart);
+		if (!scopes) {
+			warnInvalidEntry('EB_MCP_TOKENS', index);
+			return;
+		}
 		seen.add(token);
-		const scopes = parseScopes(scopesPart);
-		contexts.push({ token, scopes: scopes.length ? scopes : ['*'] });
-	}
+		contexts.push({ token, scopes });
+	});
 	return contexts;
 }
 
@@ -53,13 +60,14 @@ function splitTokens(raw: string | undefined): string[] {
 		.filter(Boolean);
 }
 
-function parseScopes(raw: string | undefined): McpScope[] {
+/** Strict scope list: null when it is empty or contains anything unknown. */
+function parseScopes(raw: string): McpScope[] | null {
 	const allowed = new Set<McpScope>(['*', 'deck:read', 'deck:write', 'room:create', 'asset:upload']);
-	return (raw ?? '')
-		.split(/[+\s]+/)
-		.map((scope) => scope.trim() as McpScope)
-		.filter((scope) => allowed.has(scope));
+	const scopes = raw.split(/[+\s]+/).map((scope) => scope.trim()).filter(Boolean);
+	if (!scopes.length || !scopes.every((scope) => allowed.has(scope as McpScope))) return null;
+	return scopes as McpScope[];
 }
+
 
 function safeEqual(a: string, b: string): boolean {
 	const ab = Buffer.from(a);

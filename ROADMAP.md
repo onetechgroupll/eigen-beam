@@ -9,7 +9,7 @@ eigen.beam is a working product: the core live flow, authoring, audience signals
 | Live core | Presenter remote, viewer lock with back-browsing, SSE sync, late join and reconnect, room TTL and caps, explicit room end |
 | Authoring | Markdown with `---` slides, templates (narrative arc, pitch, update), block types (number, quote, image, compare, timeline), progressive reveal (`++`), speaker notes (`notes:`) |
 | Import | PDF and PPTX import with preview, progress and error states; voice-to-slides |
-| Quality | Ready Check / Deck Quality Coach with deterministic heuristics and quick fixes; optional AI clarity pass |
+| Quality | Ready Check / Deck Quality Coach with deterministic heuristics and quick fixes; optional AI clarity pass on a current Claude model, with a visible note when it falls back to the local layout |
 | Audience | Reactions, questions, bookmarks, presence, re-open rate, sentiment curve, presenter feed and live stats |
 | After the talk | Replay, recap page, clone, public-safe Markdown/JSON export, session summary, slide heatmap, follow-up pack, deck v2 draft, session coach |
 | Accounts | Magic-link sign-in, deck library, private / link / team visibility, PIN-protected rooms |
@@ -21,7 +21,6 @@ eigen.beam is a working product: the core live flow, authoring, audience signals
 The plan behind this list, with waves and reasoning, is in [`docs/designs/oss-adoption.md`](docs/designs/oss-adoption.md). Good places to contribute, roughly in order of impact:
 
 - **Internationalisation.** The UI is German. Extract strings, add English, pick the language from the browser.
-- **Up-to-date AI defaults.** Refresh the default Claude model and make provider settings easier to discover.
 - **Question moderation and export.** Let the presenter hide, star and export audience questions.
 - **Speech provider choice** for voice-to-slides, beyond the current transcription path.
 - **Smoother MCP onboarding.** Easier OAuth client provisioning and token rotation.
