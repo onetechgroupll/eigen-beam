@@ -34,6 +34,8 @@ export interface DeckRepository {
 	listByTeam(teamId: string, excludeOwnerId?: string | null): Promise<Deck[]>;
 	setSharing(id: string, input: DeckSharingInput, ownerId: string): Promise<Deck | null>;
 	claimOwner(fromOwnerId: string, toOwnerId: string): Promise<number>;
+	/** Setzt den Owner eines unowned Decks atomar. null, wenn das Deck fehlt oder schon einen Owner hat. */
+	claimUnowned(id: string, ownerId: string): Promise<Deck | null>;
 }
 
 export type SqlClient = {
@@ -136,11 +138,42 @@ export class MemoryDeckRepository implements DeckRepository {
 		}
 		return count;
 	}
+
+	async claimUnowned(id: string, ownerId: string): Promise<Deck | null> {
+		const d = this.map.get(id);
+		if (!d || d.ownerId) return null;
+		d.ownerId = ownerId;
+		d.visibility ??= 'private';
+		d.teamId ??= null;
+		d.updatedAt = nowMs();
+		return clone(d);
+	}
 }
 
 // ── File-Backend (JSON-Dateien, atomar via tmp+rename) ──────────────────────
+// tmp+rename schützt nur den einzelnen Write, nicht read/check/write. Mutationen
+// eines Decks laufen deshalb pro Datei serialisiert (prozessweit, über alle
+// Repo-Instanzen hinweg). Mehrere Prozesse auf demselben Verzeichnis sind nicht
+// abgedeckt; dafür ist das Postgres-Backend da.
+const fileDeckLocks = new Map<string, Promise<unknown>>();
+
+function withFileDeckLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+	const previous = fileDeckLocks.get(key) ?? Promise.resolve();
+	const run = previous.then(fn, fn);
+	const tail = run.catch(() => undefined);
+	fileDeckLocks.set(key, tail);
+	void tail.then(() => {
+		if (fileDeckLocks.get(key) === tail) fileDeckLocks.delete(key);
+	});
+	return run;
+}
+
 export class FileDeckRepository implements DeckRepository {
 	constructor(private dir: string) {}
+
+	private locked<T>(id: string, fn: () => Promise<T>): Promise<T> {
+		return withFileDeckLock(this.path(id), fn);
+	}
 
 	private async ensureDir(): Promise<void> {
 		await mkdir(this.dir, { recursive: true });
@@ -174,20 +207,22 @@ export class FileDeckRepository implements DeckRepository {
 	}
 
 	async update(id: string, input: DeckInput, claimerId: string | null): Promise<Deck | null> {
-		const existing = await this.get(id);
-		if (!existing) return null;
-		const deck: Deck = {
-			...existing,
-			title: input.title,
-			source: input.source,
-			slides: input.slides,
-			ownerId: existing.ownerId ?? claimerId,
-			visibility: existing.visibility ?? 'private',
-			teamId: existing.teamId ?? null,
-			updatedAt: nowMs()
-		};
-		await this.write(deck);
-		return deck;
+		return this.locked(id, async () => {
+			const existing = await this.get(id);
+			if (!existing) return null;
+			const deck: Deck = {
+				...existing,
+				title: input.title,
+				source: input.source,
+				slides: input.slides,
+				ownerId: existing.ownerId ?? claimerId,
+				visibility: existing.visibility ?? 'private',
+				teamId: existing.teamId ?? null,
+				updatedAt: nowMs()
+			};
+			await this.write(deck);
+			return deck;
+		});
 	}
 
 	async listByOwner(ownerId: string): Promise<Deck[]> {
@@ -235,32 +270,52 @@ export class FileDeckRepository implements DeckRepository {
 	}
 
 	async setSharing(id: string, input: DeckSharingInput, ownerId: string): Promise<Deck | null> {
-		const existing = await this.get(id);
-		if (!existing || existing.ownerId !== ownerId) return null;
-		const sharing = normalizeSharing(input);
-		const deck: Deck = { ...existing, visibility: sharing.visibility, teamId: sharing.teamId, updatedAt: nowMs() };
-		await this.write(deck);
-		return deck;
+		return this.locked(id, async () => {
+			const existing = await this.get(id);
+			if (!existing || existing.ownerId !== ownerId) return null;
+			const sharing = normalizeSharing(input);
+			const deck: Deck = { ...existing, visibility: sharing.visibility, teamId: sharing.teamId, updatedAt: nowMs() };
+			await this.write(deck);
+			return deck;
+		});
 	}
 
 	async claimOwner(fromOwnerId: string, toOwnerId: string): Promise<number> {
-		const decks = await this.listByOwner(fromOwnerId);
-		for (const d of decks) {
-			d.ownerId = toOwnerId;
-			d.updatedAt = nowMs();
-			await this.write(d);
+		const candidates = await this.listByOwner(fromOwnerId);
+		let count = 0;
+		for (const candidate of candidates) {
+			const moved = await this.locked(candidate.id, async () => {
+				const current = await this.get(candidate.id);
+				if (!current || current.ownerId !== fromOwnerId) return false;
+				await this.write({ ...current, ownerId: toOwnerId, updatedAt: nowMs() });
+				return true;
+			});
+			if (moved) count++;
 		}
-		return decks.length;
+		return count;
+	}
+
+	async claimUnowned(id: string, ownerId: string): Promise<Deck | null> {
+		if (!isValidDeckId(id)) return null;
+		return this.locked(id, async () => {
+			const existing = await this.get(id);
+			if (!existing || existing.ownerId) return null;
+			const deck: Deck = { ...existing, ownerId, updatedAt: nowMs() };
+			await this.write(deck);
+			return deck;
+		});
 	}
 
 	async delete(id: string): Promise<boolean> {
 		if (!isValidDeckId(id)) return false;
-		try {
-			await unlink(this.path(id));
-			return true;
-		} catch {
-			return false;
-		}
+		return this.locked(id, async () => {
+			try {
+				await unlink(this.path(id));
+				return true;
+			} catch {
+				return false;
+			}
+		});
 	}
 }
 
@@ -370,6 +425,20 @@ export class PostgresDeckRepository implements DeckRepository {
 			[toOwnerId, this.clock(), fromOwnerId]
 		);
 		return result.rows.length;
+	}
+
+	async claimUnowned(id: string, ownerId: string): Promise<Deck | null> {
+		if (!isValidDeckId(id)) return null;
+		const result = await this.db.query(
+			`UPDATE decks
+			 SET owner_id = $1,
+			     visibility = COALESCE(visibility, 'private'),
+			     updated_at = $2
+			 WHERE id = $3 AND owner_id IS NULL
+			 RETURNING id, owner_id, title, source, slides, visibility, team_id, created_at, updated_at`,
+			[ownerId, this.clock(), id]
+		);
+		return result.rows[0] ? rowToDeck(result.rows[0]) : null;
 	}
 }
 

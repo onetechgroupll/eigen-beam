@@ -79,7 +79,7 @@ Reveal items are a list shown under the body. On a viewer's phone they appear on
 notes: Mention the pilot discount only if asked.
 ```
 
-Notes appear in the presenter remote under **NOTES**. They are never sent to viewers, the recap, the replay, the share page, exports or the public deck API. Only callers with edit access get them back from `GET /api/decks/:id`. Note that a deck created via MCP has no owner until it is saved in the editor, and until then everyone has edit access ([HTTP API: deck access](http-api.md#deck-access)).
+Notes appear in the presenter remote under **NOTES**. They are never sent to viewers, the recap, the replay, the share page, exports or the public deck API. Only the deck owner gets them back from `GET /api/decks/:id`. A deck created via MCP has no owner until someone claims it via its claim link, so until then nobody gets its notes over HTTP ([HTTP API: deck access](http-api.md#deck-access)).
 
 ## Images
 
