@@ -556,6 +556,17 @@ Kurz.`;
 		assert.equal(requestedOAuthScopes('deck:write', oauthClients[0]), null);
 		assert.equal(requestedOAuthScopes('not-a-scope', oauthClients[0]), null);
 		assert.equal(requestedOAuthScopes('deck:read not-a-scope', oauthClients[0]), null);
+		// Config typos fail closed: an invalid scope list drops the entry instead of granting everything.
+		assert.deepEqual(parseOAuthClients('typo:s|deck:raed,ok:s2|deck:read').map((c: { clientId: string }) => c.clientId), ['ok']);
+		assert.deepEqual(parseOAuthClients('empty:s|').map((c: { clientId: string }) => c.clientId), []);
+		assert.deepEqual(parseOAuthClients('mixed:s|deck:read+room:craete'), []);
+		assert.deepEqual(parseOAuthClients('full:s')[0].scopes, ['deck:read', 'deck:write', 'room:create', 'asset:upload']);
+		assert.equal(isMcpBearerAuthorized('Bearer typo', { EB_MCP_TOKENS: 'typo|deck:raed' }), false);
+		assert.equal(isMcpBearerAuthorized('Bearer empty', { EB_MCP_TOKENS: 'empty|' }), false);
+		assert.equal(mcpAuthContextFromHeader('Bearer mixed', { EB_MCP_TOKENS: 'mixed|deck:read+room:craete' }), null);
+		assert.deepEqual(mcpAuthContextFromHeader('Bearer good', { EB_MCP_TOKENS: 'typo|deck:raed,good|deck:read' })?.scopes, ['deck:read']);
+		assert.deepEqual(mcpAuthContextFromHeader('Bearer plain', { EB_MCP_TOKENS: 'plain' })?.scopes, ['*']);
+		ok('Scope-Tippfehler in EB_MCP_TOKENS/EB_OAUTH_CLIENTS verwerfen den Eintrag statt Vollzugriff');
 		const oauthToken = createOAuthAccessToken({ clientId: 'claude', scopes: ['deck:read'], secret: 'oauth-secret', now: 1_000, ttlSeconds: 60 });
 		assert.deepEqual(verifyOAuthAccessToken(oauthToken, 'oauth-secret', 1_020)?.scopes, ['deck:read']);
 		assert.equal(verifyOAuthAccessToken(oauthToken, 'wrong-secret', 1_020), null);
