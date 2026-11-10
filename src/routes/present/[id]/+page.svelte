@@ -133,7 +133,8 @@
 			</div>
 			<div class="end-links">
 				<a class="primary-link" href={`/replay/${data.id}`}>Replay ansehen →</a>
-				{#if questionCount > 0}<a class="secondary export-link" href={`/present/${data.id}/questions`}>Fragen exportieren</a>{/if}
+				{#if questionCount > 0}<a class="secondary export-link" href={`/present/${data.id}/questions`}>Fragen exportieren</a>
+					<p class="export-hint">Verfügbar, solange die Aufbewahrung des Rooms läuft.</p>{/if}
 				<a class="secondary-link" href="/new">Neue Session</a>
 			</div>
 		</section>
@@ -277,6 +278,7 @@
 	.primary-link { background: var(--accent); color: var(--accent-fg); }
 	.secondary-link { color: var(--muted); min-height: 44px; }
 	.export-link { display: flex; align-items: center; justify-content: center; min-height: 48px; text-decoration: none; }
+	.export-hint { margin: 0 0 4px; font-size: 12px; color: var(--muted); text-align: center; }
 	@media (max-height: 700px) { .mini-slide { width: min(50vw, 220px); max-height: 24dvh; } .slide-title h1 { font-size: clamp(22px, 7vw, 34px); } .notes, .feed { display:none; } }
 	@media (min-width: 780px) { main { max-width: 780px; margin: 0 auto; } .mini-slide { max-height: 56dvh; } }
 </style>

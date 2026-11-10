@@ -72,6 +72,8 @@ async function main() {
 			});
 			if (!response.ok) throw new Error(`Testfrage fehlgeschlagen: ${response.status}`);
 		});
+		const unauthorisedExport = await fetch(`${BASE}/present/${roomId}/questions`);
+		assert.equal(unauthorisedExport.status, 403, 'Fragen-Export ohne Presenter-Cookie muss 403 liefern');
 		await page.reload({ waitUntil: 'domcontentloaded', timeout: 45_000 });
 		await page.getByRole('button', { name: /Session beenden →/i }).click({ timeout: 10_000 });
 		const endDialog = page.getByRole('dialog', { name: /Session für alle beenden/i });

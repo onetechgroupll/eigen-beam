@@ -151,7 +151,7 @@ Errors: `400` (no file), `413` (too large), `422` (no text found), `501` (voice 
 
 `DELETE /present/:id/slide` → `{ ok: true, endedAt, stats, questions: [{ text, slide, ts }] }`. Presenter cookie required. The presenter-only question list lets **Export and end** use the complete server state without exposing question text through public replay routes. Viewers and presenter streams receive `ended` and close. Repeating the request for a retained ended room returns `410` with `{ error: true, code: "already_ended", message: "Session bereits beendet.", endedAt, stats, questions: [...] }`, so a lost first acknowledgement can be retried without inventing the end timestamp or counters client-side. Unknown rooms return `404`; wrong presenter cookies return `403`.
 
-`GET /present/:id/questions` downloads the complete presenter-only question list as Markdown while the room is retained. It uses the same presenter cookie, returns `403` for the wrong cookie and `404` after the room has been removed. Public replay APIs continue to blank question text.
+`GET /present/:id/questions` downloads the complete presenter-only question list as Markdown while the room is retained. It uses the same presenter cookie, returns `403` for the wrong cookie, `404` for an unknown room and `410` once the room has been removed after the ended-room retention window (a persisted replay may still exist). Public replay APIs continue to blank question text.
 
 ### Presenter event stream
 
