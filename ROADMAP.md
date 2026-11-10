@@ -20,12 +20,12 @@ eigen.beam is a working product: the core live flow, authoring, audience signals
 
 The plan behind this list, with waves and reasoning, is in [`docs/designs/oss-adoption.md`](docs/designs/oss-adoption.md). Good places to contribute, roughly in order of impact:
 
-- **Internationalisation.** The UI is German. Extract strings, add English, pick the language from the browser.
-- **Question moderation and export.** Let the presenter hide, star and export audience questions.
-- **Speech provider choice** for voice-to-slides, beyond the current transcription path.
-- **Smoother MCP onboarding.** Easier OAuth client provisioning and token rotation.
-- **Sending replay artifacts** (summary, follow-up pack) to the presenter by mail.
-- **Optional shared room state** (for example Redis pub/sub) for operators who need more than one instance. This would amend [ADR 0002](docs/adr/0002-in-memory-live-rooms.md).
+- **Internationalisation ([#1](https://github.com/onetechgroupll/eigen-beam/issues/1)).** The UI is German. Extract strings, add English, pick the language from the browser.
+- **Question moderation and export ([#10](https://github.com/onetechgroupll/eigen-beam/issues/10)).** Let the presenter hide, star and export audience questions.
+- **Speech provider choice ([#11](https://github.com/onetechgroupll/eigen-beam/issues/11))** for voice-to-slides, beyond the current transcription path.
+- **Smoother MCP onboarding ([#12](https://github.com/onetechgroupll/eigen-beam/issues/12)).** Easier OAuth client provisioning and token rotation.
+- **Sending replay artifacts ([#13](https://github.com/onetechgroupll/eigen-beam/issues/13))** (summary, follow-up pack) to the presenter by mail.
+- **Optional shared room state ([#14](https://github.com/onetechgroupll/eigen-beam/issues/14))** (for example Redis pub/sub) for operators who need more than one instance. This would amend [ADR 0002](docs/adr/0002-in-memory-live-rooms.md).
 
 ## Not building
 

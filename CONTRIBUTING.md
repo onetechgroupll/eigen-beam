@@ -8,7 +8,10 @@ Thanks for helping. eigen.beam is a small project with a clear product line, so 
 - **Small fixes and docs:** send a pull request directly.
 - **Features:** open an issue first. Check [`ROADMAP.md`](ROADMAP.md): items under "Next" are welcome, items under "Not building" will be declined. Architectural changes need an ADR in [`docs/adr/`](docs/adr/README.md).
 - **Good first issues** are labelled [`good first issue`](https://github.com/onetechgroupll/eigen-beam/labels/good%20first%20issue). Internationalisation of the German UI is the biggest open one.
+- **Deferred ideas** are labelled [`idea`](https://github.com/onetechgroupll/eigen-beam/labels/idea). Friction found while presenting in the field belongs under [`field`](https://github.com/onetechgroupll/eigen-beam/labels/field) — open the issue with the *Field session friction* template (`.github/ISSUE_TEMPLATE/field-session-friction.md`).
 - **Security issues:** never as a public issue; see [`SECURITY.md`](SECURITY.md).
+
+Project adoption metrics come only from passive GitHub counters. eigen.beam does not add telemetry to the app or collect usage from self-hosted instances.
 
 ## Workflow
 
