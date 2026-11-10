@@ -1,5 +1,5 @@
 import { requestDeckJson, type AiFallbackReason } from '$lib/server/claude';
-import { parseDeck } from '$lib/deck-parse';
+import { escapeReservedSourceLine, parseDeck } from '$lib/deck-parse';
 
 export type ClarifyResult = { title: string; source: string; mode: 'local' | 'ai'; fallbackReason?: AiFallbackReason };
 
@@ -7,10 +7,10 @@ export function localClarify(title: string, source: string): ClarifyResult {
 	const slides = parseDeck(source);
 	const blocks = slides.slice(0, 15).map((slide) => {
 		const lines: string[] = [];
-		if (slide.eyebrow) lines.push(oneIdea(slide.eyebrow, 42));
+		if (slide.eyebrow) lines.push(escapeReservedSourceLine(oneIdea(slide.eyebrow, 42)));
 		if (slide.kind && slide.kind !== 'text') lines.push(`type: ${slide.kind}`);
 		lines.push(`# ${oneIdea(slide.headline, 68)}`);
-		if (slide.body) lines.push(oneIdea(slide.body, 110));
+		if (slide.body) lines.push(escapeReservedSourceLine(oneIdea(slide.body, 110)));
 		if (slide.image) lines.push(`![${oneIdea(slide.headline, 80)}](${slide.image})`);
 		for (const item of slide.reveal?.slice(0, 3) ?? []) lines.push(`++ ${oneIdea(item, 72)}`);
 		if (slide.speakerNotes) lines.push(`notes: ${oneIdea(slide.speakerNotes, 180)}`);

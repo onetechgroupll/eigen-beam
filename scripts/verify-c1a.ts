@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { readFile, rm } from 'node:fs/promises';
 import { parseDeck, sanitizeImageUrl } from '../src/lib/deck-parse.ts';
-import { DECK_TEMPLATE, publicSlidesToSource, toPublicSlides, type PublicSlide } from '../src/lib/decks.ts';
+import { DECK_TEMPLATE, publicSlidesToSource, toPublicSlides, type Deck, type PublicSlide } from '../src/lib/decks.ts';
 import { slideFitProfile } from '../src/lib/slide-quality.ts';
 import { applyQualityFix, deckReadyCheck } from '../src/lib/deck-quality.ts';
 import { MemoryDeckRepository, FileDeckRepository, PostgresDeckRepository } from '../src/lib/server/decks-repo.ts';
@@ -29,7 +29,7 @@ import { applySentimentSignal, conversionCta, liveSentimentLabel, pacingHint, re
 import { fieldTestChecklist, liveStatsDashboard } from '../src/lib/stats-dashboard.ts';
 import { presenterFeedItem } from '../src/lib/presenter-feed.ts';
 import { accountProfileFromSession, teamIdForEmail, toDeckLibraryItems } from '../src/lib/account.ts';
-import { deckExportFilename, deckToOwnerExportJson, deckToOwnerExportMarkdown, deckToPublicExportJson, deckToPublicExportMarkdown } from '../src/lib/server/deck-export.ts';
+import { deckExportFilename, deckExportJsonFor, deckExportMarkdownFor, deckToOwnerExportJson, deckToOwnerExportMarkdown, deckToPublicExportJson, deckToPublicExportMarkdown, type OwnerDeckExportJson } from '../src/lib/server/deck-export.ts';
 import { buildTakeaway } from '../src/lib/server/takeaway.ts';
 import { buildFollowUpPack } from '../src/lib/follow-up-pack.ts';
 import { buildSessionSummary } from '../src/lib/session-summary.ts';
@@ -158,7 +158,9 @@ async function main() {
 			{ kind: 'quote', eyebrow: 'Customer', headline: 'Customer voice', quote: 'We stopped sending PDFs.', attribution: 'Head of Sales', reveal: ['Show source'] },
 			{ kind: 'image', headline: 'Cover', body: 'left: still body text', image: '/assets/cover.png' },
 			{ kind: 'compare', headline: 'Before / after', compare: { leftTitle: 'PDF', leftBody: 'Async', rightTitle: 'Live', rightBody: 'In sync' } },
-			{ kind: 'timeline', headline: 'Rollout', timeline: [{ label: '09:30', text: 'Kick-off' }, { label: 'Q2', text: 'Launch' }], image: 'https://cdn.example.test/plan.png' }
+			{ kind: 'timeline', headline: 'Rollout', timeline: [{ label: '09:30', text: 'Kick-off' }, { label: 'Q2', text: 'Launch' }], image: 'https://cdn.example.test/plan.png' },
+			{ kind: 'compare', eyebrow: 'Extras', headline: 'Compare mit Reveal', compare: { leftTitle: 'L', leftBody: 'LB', rightTitle: 'R', rightBody: 'RB' }, reveal: ['Extra'] },
+			{ kind: 'number', headline: 'Zahl mit Bild', metric: '7', image: 'https://cdn.example.test/n.png' }
 		];
 		const exported = publicSlidesToSource(slides);
 		assert.deepEqual(parseDeck(exported), slides);
@@ -185,21 +187,34 @@ async function main() {
 			'notes: geheim',
 			'topic: bleibt Text',
 			'++ x',
+			'>> x',
+			'reveal: x',
 			'- a: b',
 			'- Q1:Pilot',
 			'left: bleibt Text',
+			'---',
+			'NOTES: upper',
 			'\\notes: ein Backslash',
 			'\\\\notes: zwei Backslashes',
-			'\\\\\\notes: drei Backslashes'
+			'\\\\\\notes: drei Backslashes',
+			'\\',
+			'\\hallo'
 		];
 		const slides: PublicSlide[] = bodies.map((body, index) => ({ headline: `Escape ${index + 1}`, body }));
 		const exported = publicSlidesToSource(slides);
 		assert.match(exported, /^\\notes: geheim$/m);
 		assert.match(exported, /^topic: bleibt Text$/m);
 		assert.match(exported, /^\\\+\+ x$/m);
+		assert.match(exported, /^\\>> x$/m);
+		assert.match(exported, /^\\reveal: x$/m);
 		assert.match(exported, /^\\- a: b$/m);
 		assert.match(exported, /^\\- Q1:Pilot$/m);
 		assert.match(exported, /^\\left: bleibt Text$/m);
+		assert.match(exported, /^\\---$/m);
+		assert.match(exported, /^\\NOTES: upper$/m);
+		const indented = publicSlidesToSource([{ headline: 'Indent', body: '  notes: indent' }]);
+		assert.match(indented, /^ {2}\\notes: indent$/m);
+		assert.equal(parseDeck(indented)[0].body, 'notes: indent');
 		assert.deepEqual(parseDeck(exported).map((slide) => slide.body), bodies);
 		assert.deepEqual(parseDeck('# Existing\ntopic: bleibt Text')[0], { headline: 'Existing', body: 'topic: bleibt Text' });
 		assert.deepEqual(parseDeck('# Existing quote field\nquote: bleibt Text')[0], { headline: 'Existing quote field', body: 'quote: bleibt Text' });
@@ -225,6 +240,22 @@ async function main() {
 			attribution: 'Legacy author'
 		});
 		ok('Quote-Direktiven folgen dem letzten Typ, gewinnen vor Legacy und fallen leer zurück');
+	}
+
+	// 8f) Owner-Export-Entscheidung und Clone-Komposition sind gepinnt
+	{
+		const rich = parseDeck('# A\nnotes: privat\n---\n# B\ntype: number\nmetric: 9\n');
+		const publicSlides = toPublicSlides(rich);
+		const cloneSource = publicSlidesToSource(publicSlides);
+		assert.equal(cloneSource.includes('notes:'), false);
+		assert.deepEqual(parseDeck(cloneSource), publicSlides);
+		const ownerDeck: Deck = { id: 'deckown', title: 'T', source: '# A\nnotes: privat', slides: rich, ownerId: 'user-x', createdAt: 0, updatedAt: 0 };
+		assert.equal(deckExportMarkdownFor(ownerDeck, 'user-x'), ownerDeck.source);
+		assert.equal(deckExportMarkdownFor(ownerDeck, 'attacker').includes('privat'), false);
+		assert.equal('source' in deckExportJsonFor(ownerDeck, 'attacker'), false);
+		assert.equal('source' in deckExportJsonFor(ownerDeck, null), false);
+		assert.equal((deckExportJsonFor(ownerDeck, 'user-x') as OwnerDeckExportJson).source, ownerDeck.source);
+		ok('Owner-Export nur für den Owner; Clone baut aus Public Slides ohne Notes');
 	}
 
 	// 9) Presenter notes werden für öffentliche Payloads entfernt

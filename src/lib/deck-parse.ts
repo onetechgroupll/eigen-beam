@@ -146,8 +146,10 @@ function normalizeKind(value: string | undefined, image: string | undefined): Sl
 function parseQuote(kind: SlideKind, headline: string, body: string, lines: string[], directives: Map<string, string>): { quote: string; attribution?: string } | null {
 	if (kind !== 'quote') return null;
 	const quoteLine = lines.find((line) => line.trim().startsWith('>'));
-	const quote = directives.get('quote') || cleanInline((quoteLine ?? headline).replace(/^\s*>\s*/, ''));
-	const attribution = directives.get('attribution') || lines
+	const quoteDirective = directives.get('quote');
+	const quote = (quoteDirective ? cleanInline(quoteDirective) : '') || cleanInline((quoteLine ?? headline).replace(/^\s*>\s*/, ''));
+	const attributionDirective = directives.get('attribution');
+	const attribution = (attributionDirective ? cleanInline(attributionDirective) : '') || lines
 		.map((line) => line.trim())
 		.find((line) => /^[-—–]\s+/.test(line))
 		?.replace(/^[-—–]\s+/, '')
@@ -198,14 +200,44 @@ function unescapeReservedSourceLine(line: string): string {
 	return line;
 }
 
-function isReservedSourceLine(line: string): boolean {
+export function isReservedSourceLine(line: string): boolean {
 	const directive = line.match(DIRECTIVE);
 	return REVEAL.test(line)
-		|| TIMELINE_SPACED.test(line)
-		|| TIMELINE.test(line)
+		|| looksLikeTimelineEntry(line)
 		|| /^\s*(?:left|right)\s*:/i.test(line)
 		|| SEPARATOR.test(line)
 		|| Boolean(directive && isKnownDirective(directive[1], true));
+}
+
+// Linear, backtracking-free stand-in for the TIMELINE/TIMELINE_SPACED pair:
+// anchored bullet prefix, then a colon or a spaced dash separator. The lazy
+// regex pair detonated super-quadratically on long whitespace runs, reachable
+// per exported body line. Superset of the strict patterns; escape and unescape
+// share this one predicate, so the roundtrip stays exact either way.
+function looksLikeTimelineEntry(line: string): boolean {
+	const match = line.match(/^\s*[-*]\s*([\s\S]+)$/);
+	if (!match) return false;
+	const rest = match[1];
+	if (rest.includes(':')) return true;
+	for (let i = 1; i < rest.length - 1; i += 1) {
+		const code = rest.charCodeAt(i);
+		if ((code === 45 || code === 8211 || code === 8212) && /\s/.test(rest[i - 1]) && /\s/.test(rest[i + 1])) return true;
+	}
+	return false;
+}
+
+export function escapeReservedSourceLine(line: string): string {
+	const match = line.match(/^(\s*)([\s\S]*)$/);
+	if (!match) return line;
+	const [, whitespace, content] = match;
+	if (isReservedSourceLine(content.replace(/^\\+/, ''))) {
+		return `${whitespace}\\${content}`;
+	}
+	return line;
+}
+
+export function escapeBodyLines(body: string): string {
+	return body.replace(/\r\n?/g, '\n').split('\n').map(escapeReservedSourceLine).join('\n');
 }
 
 function cleanInline(value: string): string {

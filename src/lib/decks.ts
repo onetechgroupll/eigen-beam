@@ -1,6 +1,8 @@
 // Slide-/Deck-Schema für eigen.beam.
 // Content-First bleibt die Grundform; C3 ergänzt blockartige Präsentations-Typen,
 // ohne in einen Freiform-WYSIWYG abzurutschen.
+import { escapeBodyLines } from './deck-parse';
+
 export type SlideKind = 'text' | 'number' | 'quote' | 'image' | 'compare' | 'timeline';
 
 export type CompareBlock = {
@@ -51,7 +53,7 @@ export function publicSlidesToSource(slides: PublicSlide[]): string {
 		if (slide.attribution) lines.push(`attribution: ${slide.attribution}`);
 		lines.push(`# ${slide.headline}`);
 		if (slide.image) lines.push(`![](${slide.image})`);
-		if (slide.body) lines.push(slide.body.replace(/\r\n?/g, '\n').split('\n').map(escapeReservedSourceLine).join('\n'));
+		if (slide.body) lines.push(escapeBodyLines(slide.body));
 		if (slide.compare) {
 			lines.push(`left: ${slide.compare.leftTitle}${slide.compare.leftBody ? ` | ${slide.compare.leftBody}` : ''}`);
 			lines.push(`right: ${slide.compare.rightTitle}${slide.compare.rightBody ? ` | ${slide.compare.rightBody}` : ''}`);
@@ -60,36 +62,6 @@ export function publicSlidesToSource(slides: PublicSlide[]): string {
 		if (slide.reveal) for (const item of slide.reveal) lines.push(`++ ${item}`);
 		return lines.join('\n');
 	}).join('\n\n---\n\n');
-}
-
-const SOURCE_DIRECTIVE = /^\s*([a-zA-Z][a-zA-Z0-9_-]*)\s*:/;
-const SOURCE_REVEAL = /^\s*(?:\+\+|>>|reveal:)\s*\S/i;
-const SOURCE_TIMELINE_SPACED = /^\s*[-*]\s*(.+?)\s*(?::\s+|\s+[–—-]\s+)(.+)$/;
-const SOURCE_TIMELINE = /^\s*[-*]\s*([^:–—-]+)\s*[:–—-]\s*(.+)$/;
-const SOURCE_COMPARE = /^\s*(?:left|right)\s*:/i;
-const SOURCE_SEPARATOR = /^\s*---\s*$/;
-const RESERVED_DIRECTIVES = new Set([
-	'type', 'kind', 'eyebrow', 'notes', 'speaker', 'number', 'metric', 'quote', 'attribution'
-]);
-
-function isReservedSourceLine(line: string): boolean {
-	const directive = line.match(SOURCE_DIRECTIVE);
-	return SOURCE_REVEAL.test(line)
-		|| SOURCE_TIMELINE_SPACED.test(line)
-		|| SOURCE_TIMELINE.test(line)
-		|| SOURCE_COMPARE.test(line)
-		|| SOURCE_SEPARATOR.test(line)
-		|| Boolean(directive && RESERVED_DIRECTIVES.has(directive[1].toLowerCase()));
-}
-
-function escapeReservedSourceLine(line: string): string {
-	const match = line.match(/^(\s*)(.*)$/);
-	if (!match) return line;
-	const [, whitespace, content] = match;
-	if (isReservedSourceLine(content.replace(/^\\+/, ''))) {
-		return `${whitespace}\\${content}`;
-	}
-	return line;
 }
 
 export type DeckVisibility = 'private' | 'link' | 'team';
