@@ -13,7 +13,8 @@ const TIMELINE = /^\s*[-*]\s*([^:–—-]+)\s*[:–—-]\s*(.+)$/;
 
 export function parseDeck(source: string): Slide[] {
 	const slides: Slide[] = [];
-	for (const block of splitBlocks(source)) {
+	const normalizedSource = source.replace(/\r\n?/g, '\n');
+	for (const block of splitBlocks(normalizedSource)) {
 		const slide = parseBlock(block);
 		if (slide) slides.push(slide);
 	}
@@ -21,7 +22,7 @@ export function parseDeck(source: string): Slide[] {
 }
 
 function splitBlocks(source: string): string[] {
-	const lines = source.replace(/\r\n?/g, '\n').split('\n');
+	const lines = source.split('\n');
 	const blocks: string[][] = [[]];
 	for (const line of lines) {
 		if (SEPARATOR.test(line)) blocks.push([]);
@@ -55,6 +56,14 @@ function parseBlock(block: string): Slide | null {
 	}
 
 	const rawLines = text.split('\n');
+	let kindDirective: string | undefined;
+	for (const raw of rawLines) {
+		const directive = raw.match(DIRECTIVE);
+		if (directive && ['type', 'kind'].includes(directive[1].toLowerCase())) {
+			kindDirective = directive[2];
+		}
+	}
+	const kind = normalizeKind(kindDirective, image);
 	const directives = new Map<string, string>();
 	const lines: string[] = [];
 	const reveal: string[] = [];
@@ -67,7 +76,7 @@ function parseBlock(block: string): Slide | null {
 			continue;
 		}
 		const directive = raw.match(DIRECTIVE);
-		if (directive && isKnownDirective(directive[1])) {
+		if (directive && isKnownDirective(directive[1], kind === 'quote')) {
 			const key = directive[1].toLowerCase();
 			if (key === 'notes' || key === 'speaker') speakerNotes = directive[2].trim();
 			else directives.set(key, directive[2].trim());
@@ -76,7 +85,6 @@ function parseBlock(block: string): Slide | null {
 		lines.push(raw);
 	}
 
-	const kind = normalizeKind(directives.get('type') ?? directives.get('kind'), image);
 	const headingIdx = lines.findIndex((line) => HEADING.test(line));
 	let eyebrow: string | undefined;
 	let headline = '';
@@ -96,7 +104,7 @@ function parseBlock(block: string): Slide | null {
 	}
 
 	const body = collapse(bodyLines);
-	const quote = parseQuote(kind, headline, body, bodyLines);
+	const quote = parseQuote(kind, headline, body, bodyLines, directives);
 	const compare = parseCompare(kind, directives, bodyLines);
 	const timeline = parseTimeline(kind, bodyLines);
 	const metric = directives.get('number') ?? directives.get('metric') ?? (kind === 'number' ? headline : undefined);
@@ -121,22 +129,27 @@ function parseBlock(block: string): Slide | null {
 	});
 }
 
-function isKnownDirective(key: string): boolean {
-	return ['type', 'kind', 'eyebrow', 'notes', 'speaker', 'number', 'metric'].includes(key.toLowerCase());
+function isKnownDirective(key: string, allowQuoteFields = false): boolean {
+	const normalized = key.toLowerCase();
+	return ['type', 'kind', 'eyebrow', 'notes', 'speaker', 'number', 'metric'].includes(normalized)
+		|| (allowQuoteFields && ['quote', 'attribution'].includes(normalized));
 }
 
 function normalizeKind(value: string | undefined, image: string | undefined): SlideKind {
 	const v = (value ?? '').toLowerCase().trim();
+	if (v === 'text') return 'text';
 	if (['number', 'quote', 'compare', 'timeline'].includes(v)) return v as SlideKind;
 	if (['image', 'full-bleed', 'fullbleed'].includes(v)) return 'image';
 	return image ? 'image' : 'text';
 }
 
-function parseQuote(kind: SlideKind, headline: string, body: string, lines: string[]): { quote: string; attribution?: string } | null {
+function parseQuote(kind: SlideKind, headline: string, body: string, lines: string[], directives: Map<string, string>): { quote: string; attribution?: string } | null {
 	if (kind !== 'quote') return null;
 	const quoteLine = lines.find((line) => line.trim().startsWith('>'));
-	const quote = cleanInline((quoteLine ?? headline).replace(/^\s*>\s*/, ''));
-	const attribution = lines
+	const quoteDirective = directives.get('quote');
+	const quote = (quoteDirective && quoteDirective.trim() ? quoteDirective : '') || cleanInline((quoteLine ?? headline).replace(/^\s*>\s*/, ''));
+	const attributionDirective = directives.get('attribution');
+	const attribution = (attributionDirective && attributionDirective.trim() ? attributionDirective : '') || lines
 		.map((line) => line.trim())
 		.find((line) => /^[-—–]\s+/.test(line))
 		?.replace(/^[-—–]\s+/, '')
@@ -174,7 +187,59 @@ function splitTitleBody(value: string): { title: string; body?: string } {
 }
 
 function collapse(lines: string[]): string {
-	return lines.map((l) => l.trim()).filter(Boolean).join(' ').trim();
+	return lines.map((l) => unescapeReservedSourceLine(l).trim()).filter(Boolean).join(' ').trim();
+}
+
+function unescapeReservedSourceLine(line: string): string {
+	const match = line.match(/^(\s*)\\([\s\S]*)$/);
+	if (!match) return line;
+	const [, whitespace, content] = match;
+	if (isReservedSourceLine(content.replace(/^\\+/, ''))) {
+		return `${whitespace}${content}`;
+	}
+	return line;
+}
+
+export function isReservedSourceLine(line: string): boolean {
+	const directive = line.match(DIRECTIVE);
+	return HEADING.test(line)
+		|| REVEAL.test(line)
+		|| looksLikeTimelineEntry(line)
+		|| /^\s*(?:left|right)\s*:/i.test(line)
+		|| SEPARATOR.test(line)
+		|| Boolean(directive && isKnownDirective(directive[1], true));
+}
+
+// Linear, backtracking-free stand-in for the TIMELINE/TIMELINE_SPACED pair:
+// a bullet line whose text contains any separator character (`:`, `-`, `–`, `—`)
+// after at least one label character. Conservative superset of the strict
+// patterns (parseTimeline accepts compact and spaced separators); escape and
+// unescape share this one predicate, so the roundtrip stays exact either way.
+// The lazy regex pair this replaces detonated super-quadratically on long
+// whitespace runs, reachable per exported body line.
+function looksLikeTimelineEntry(line: string): boolean {
+	const match = line.match(/^\s*[-*]\s*([\s\S]+)$/);
+	if (!match) return false;
+	const rest = match[1];
+	for (let i = 1; i < rest.length; i += 1) {
+		const c = rest[i];
+		if (c === ':' || c === '-' || c === '–' || c === '—') return true;
+	}
+	return false;
+}
+
+export function escapeReservedSourceLine(line: string): string {
+	const match = line.match(/^(\s*)([\s\S]*)$/);
+	if (!match) return line;
+	const [, whitespace, content] = match;
+	if (isReservedSourceLine(content.replace(/^\\+/, ''))) {
+		return `${whitespace}\\${content}`;
+	}
+	return line;
+}
+
+export function escapeBodyLines(body: string): string {
+	return body.replace(/\r\n?/g, '\n').split('\n').map(escapeReservedSourceLine).join('\n');
 }
 
 function cleanInline(value: string): string {

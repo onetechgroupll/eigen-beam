@@ -5,18 +5,18 @@
 import assert from 'node:assert/strict';
 import { readFile, rm } from 'node:fs/promises';
 import { parseDeck, sanitizeImageUrl } from '../src/lib/deck-parse.ts';
-import { DECK_TEMPLATE, toPublicSlides } from '../src/lib/decks.ts';
+import { DECK_TEMPLATE, publicSlidesToSource, toPublicSlides, type Deck, type PublicSlide } from '../src/lib/decks.ts';
 import { slideFitProfile } from '../src/lib/slide-quality.ts';
 import { applyQualityFix, deckReadyCheck } from '../src/lib/deck-quality.ts';
 import { MemoryDeckRepository, FileDeckRepository, PostgresDeckRepository } from '../src/lib/server/decks-repo.ts';
-import { createCreatorToken, createMagicToken, createUserSessionToken, userIdForEmail, verifyCreatorToken, verifyMagicToken, verifyUserSessionToken } from '../src/lib/server/auth.ts';
+import { createCreatorToken, createMagicToken, createPinVerifier, createUserSessionToken, userIdForEmail, verifyCreatorToken, verifyMagicToken, verifyUserSessionToken } from '../src/lib/server/auth.ts';
 import { importTextToDeckSource, extractPptxText, extractPdfText } from '../src/lib/server/imports.ts';
 import { transcribeAudio, voiceFileToDeckSource } from '../src/lib/server/voice.ts';
 import { localClarify } from '../src/lib/server/clarity.ts';
 import Anthropic from '@anthropic-ai/sdk';
 import { DEFAULT_CLAUDE_MODEL, claudeModel, parseDeckJson, requestDeckJson } from '../src/lib/server/claude.ts';
 import { sniffImage, S3AssetStore } from '../src/lib/server/assets.ts';
-import { claimPresenterToken, createRoom, endRoom, getReplay, recordViewerEvent, setSlide } from '../src/lib/server/rooms.ts';
+import { claimPresenterToken, createRoom, endRoom, ENDED_ROOM_TTL_MS, evictRoomForCapacity, getReplay, getRoom, recordViewerEvent, removeRoom, resolveEndedRoomTiming, setSlide, sweepRooms } from '../src/lib/server/rooms.ts';
 import { createUnsubToken, escapeHtml, recordFollow, recordFollowDetailed, sanitizeFollowTarget, verifyUnsubToken } from '../src/lib/server/followers.ts';
 import { OutboxEmailProvider, getMailerForEnv, readOutbox } from '../src/lib/server/mailer.ts';
 import { PostgresActivityStore } from '../src/lib/server/activity-store.ts';
@@ -29,7 +29,7 @@ import { applySentimentSignal, conversionCta, liveSentimentLabel, pacingHint, re
 import { fieldTestChecklist, liveStatsDashboard } from '../src/lib/stats-dashboard.ts';
 import { presenterFeedItem } from '../src/lib/presenter-feed.ts';
 import { accountProfileFromSession, teamIdForEmail, toDeckLibraryItems } from '../src/lib/account.ts';
-import { deckExportFilename, deckToPublicExportJson, deckToPublicExportMarkdown } from '../src/lib/server/deck-export.ts';
+import { deckExportFilename, deckExportJsonFor, deckExportMarkdownFor, deckToOwnerExportJson, deckToOwnerExportMarkdown, deckToPublicExportJson, deckToPublicExportMarkdown, type OwnerDeckExportJson } from '../src/lib/server/deck-export.ts';
 import { buildTakeaway } from '../src/lib/server/takeaway.ts';
 import { buildFollowUpPack } from '../src/lib/follow-up-pack.ts';
 import { buildSessionSummary } from '../src/lib/session-summary.ts';
@@ -115,11 +115,14 @@ async function main() {
 		ok('leeres Source ergibt []');
 	}
 
-	// 7) CRLF wird normalisiert
+	// 7) CRLF und einzelne CR werden vor dem Parsen normalisiert
 	{
-		const slides = parseDeck('# A\r\n---\r\n# B');
-		assert.equal(slides.length, 2);
-		ok('CRLF-Zeilenenden werden normalisiert');
+		assert.deepEqual(parseDeck('# A\r\n---\r\n# B').map((slide) => slide.headline), ['A', 'B']);
+		assert.deepEqual(parseDeck('# C\r---\r# D').map((slide) => slide.headline), ['C', 'D']);
+		const exported = publicSlidesToSource([{ headline: 'CR body', body: 'sichtbar\rnotes: bleibt Body' }]);
+		assert.match(exported, /^\\notes: bleibt Body$/m);
+		assert.deepEqual(parseDeck(exported)[0], { headline: 'CR body', body: 'sichtbar notes: bleibt Body' });
+		ok('CRLF und einzelne CR werden normalisiert; CR-Body kann keine Direktive injizieren');
 	}
 
 	// 8) Blocktypen + Reveal
@@ -145,6 +148,119 @@ async function main() {
 		const template = parseDeck(DECK_TEMPLATE).find((s) => s.kind === 'timeline');
 		assert.deepEqual(template?.timeline?.map((i) => i.label), ['00:00', '00:15', '05:00']);
 		ok('Timeline: Uhrzeit-Labels, gespaced Trenner, kompakte Fallback-Syntax');
+	}
+
+	// 8c) Public export roundtript alle Slide-Typen und optionalen Felder
+	{
+		const slides: PublicSlide[] = [
+			{ eyebrow: 'Context', headline: 'Text slide', body: 'notes: geheim', image: 'https://cdn.example.test/text.png', reveal: ['First reveal'] },
+			{ kind: 'number', eyebrow: 'Signal', headline: 'Conversion', body: 'type: quote', metric: '42 %' },
+			{ kind: 'quote', eyebrow: 'Customer', headline: 'Customer voice', quote: 'We stopped sending PDFs.', attribution: 'Head of Sales', reveal: ['Show source'] },
+			{ kind: 'image', headline: 'Cover', body: 'left: still body text', image: '/assets/cover.png' },
+			{ kind: 'compare', headline: 'Before / after', compare: { leftTitle: 'PDF', leftBody: 'Async', rightTitle: 'Live', rightBody: 'In sync' } },
+			{ kind: 'timeline', headline: 'Rollout', timeline: [{ label: '09:30', text: 'Kick-off' }, { label: 'Q2', text: 'Launch' }], image: 'https://cdn.example.test/plan.png' },
+			{ kind: 'compare', eyebrow: 'Extras', headline: 'Compare mit Reveal', compare: { leftTitle: 'L', leftBody: 'LB', rightTitle: 'R', rightBody: 'RB' }, reveal: ['Extra'] },
+			{ kind: 'number', headline: 'Zahl mit Bild', metric: '7', image: 'https://cdn.example.test/n.png' }
+		];
+		const exported = publicSlidesToSource(slides);
+		assert.deepEqual(parseDeck(exported), slides);
+		assert.equal(publicSlidesToSource(parseDeck(exported)), exported);
+		ok('Public Markdown roundtript alle 6 Typen und bleibt beim Doppel-Re-Export byte-stabil');
+	}
+
+	// 8d) Das kanonische Bild bleibt bei weiteren Bildern im Body das erste Bild
+	{
+		const slide: PublicSlide = {
+			headline: 'Two images',
+			body: 'Body copy ![secondary](https://cdn.example.test/secondary.png)',
+			image: 'https://cdn.example.test/primary.png'
+		};
+		const exported = publicSlidesToSource([slide]);
+		assert.ok(exported.indexOf('primary.png') < exported.indexOf('secondary.png'));
+		assert.deepEqual(parseDeck(exported)[0], slide);
+		ok('Public Markdown schreibt das kanonische Bild vor weitere Body-Bilder');
+	}
+
+	// 8e) Reservierte Body-Syntax wird nur mit explizitem Backslash-Escape interpretiert
+	{
+		const bodies = [
+			'notes: geheim',
+			'topic: bleibt Text',
+			'++ x',
+			'>> x',
+			'reveal: x',
+			'- a: b',
+			'- Q1:Pilot',
+			'- Q1-Pilot',
+			'- Q1: a\u2028b',
+			'# Kein Heading',
+			'left: bleibt Text',
+			'---',
+			'NOTES: upper',
+			'\\notes: ein Backslash',
+			'\\\\notes: zwei Backslashes',
+			'\\\\\\notes: drei Backslashes',
+			'\\',
+			'\\hallo'
+		];
+		const slides: PublicSlide[] = bodies.map((body, index) => ({ headline: `Escape ${index + 1}`, body }));
+		const exported = publicSlidesToSource(slides);
+		assert.match(exported, /^\\notes: geheim$/m);
+		assert.match(exported, /^topic: bleibt Text$/m);
+		assert.match(exported, /^\\\+\+ x$/m);
+		assert.match(exported, /^\\>> x$/m);
+		assert.match(exported, /^\\reveal: x$/m);
+		assert.match(exported, /^\\- a: b$/m);
+		assert.match(exported, /^\\- Q1:Pilot$/m);
+		assert.match(exported, /^\\- Q1-Pilot$/m);
+		assert.match(exported, /^\\# Kein Heading$/m);
+		assert.match(exported, /^\\left: bleibt Text$/m);
+		assert.match(exported, /^\\---$/m);
+		assert.match(exported, /^\\NOTES: upper$/m);
+		const indented = publicSlidesToSource([{ headline: 'Indent', body: '  notes: indent' }]);
+		assert.match(indented, /^ {2}\\notes: indent$/m);
+		assert.equal(parseDeck(indented)[0].body, 'notes: indent');
+		assert.deepEqual(parseDeck(exported).map((slide) => slide.body), bodies);
+		assert.deepEqual(parseDeck('# Existing\ntopic: bleibt Text')[0], { headline: 'Existing', body: 'topic: bleibt Text' });
+		assert.deepEqual(parseDeck('# Existing quote field\nquote: bleibt Text')[0], { headline: 'Existing quote field', body: 'quote: bleibt Text' });
+		ok('Body-Escapes schützen Direktiven, kompakte Timeline und 1–3 führende Backslashes');
+	}
+
+	// 8f) Quote-Direktiven gelten nur für den finalen Typ und leere Werte fallen auf Legacy zurück
+	{
+		assert.deepEqual(parseDeck('type: quote\ntype: text\n# Text\nquote: literal\nattribution: literal')[0], {
+			headline: 'Text',
+			body: 'quote: literal attribution: literal'
+		});
+		assert.deepEqual(parseDeck('type: text\nkind: quote\n# Customer\n> Legacy quote\n— Legacy author\nquote: Export quote\nattribution: Export author')[0], {
+			headline: 'Customer',
+			kind: 'quote',
+			quote: 'Export quote',
+			attribution: 'Export author'
+		});
+		assert.deepEqual(parseDeck('type: quote\n# Customer\nquote:\nattribution:\n> Legacy quote\n— Legacy author')[0], {
+			headline: 'Customer',
+			kind: 'quote',
+			quote: 'Legacy quote',
+			attribution: 'Legacy author'
+		});
+		ok('Quote-Direktiven folgen dem letzten Typ, gewinnen vor Legacy und fallen leer zurück');
+	}
+
+	// 8f) Owner-Export-Entscheidung und Clone-Komposition sind gepinnt
+	{
+		const rich = parseDeck('# A\nnotes: privat\n---\n# B\ntype: number\nmetric: 9\n');
+		const publicSlides = toPublicSlides(rich);
+		const cloneSource = publicSlidesToSource(publicSlides);
+		assert.equal(cloneSource.includes('notes:'), false);
+		assert.deepEqual(parseDeck(cloneSource), publicSlides);
+		const ownerDeck: Deck = { id: 'deckown', title: 'T', source: '# A\nnotes: privat', slides: rich, ownerId: 'user-x', createdAt: 0, updatedAt: 0 };
+		assert.equal(deckExportMarkdownFor(ownerDeck, 'user-x'), ownerDeck.source);
+		assert.equal(deckExportMarkdownFor(ownerDeck, 'attacker').includes('privat'), false);
+		assert.equal('source' in deckExportJsonFor(ownerDeck, 'attacker'), false);
+		assert.equal('source' in deckExportJsonFor(ownerDeck, null), false);
+		assert.equal((deckExportJsonFor(ownerDeck, 'user-x') as OwnerDeckExportJson).source, ownerDeck.source);
+		ok('Owner-Export nur für den Owner; Clone baut aus Public Slides ohne Notes');
 	}
 
 	// 9) Presenter notes werden für öffentliche Payloads entfernt
@@ -451,8 +567,16 @@ Kurz.`;
 		assert.equal(exportedJson.slideCount, 1);
 		assert.equal('source' in exportedJson, false);
 		assert.equal(JSON.stringify(exportedJson).includes('notes: privat'), false);
+		assert.equal(deckToOwnerExportMarkdown(older), older.source);
+		assert.equal(deckToOwnerExportJson(older).source, older.source);
+		assert.equal(deckToOwnerExportJson(older).source.includes('notes: privat'), true);
+		const forgedNonOwner = canEditDeck(older, 'attacker')
+			? deckToOwnerExportJson(older)
+			: deckToPublicExportJson(older);
+		assert.equal('source' in forgedNonOwner, false);
+		assert.equal(JSON.stringify(forgedNonOwner).includes('notes: privat'), false);
 		assert.equal(deckExportFilename('Pitch: Q3 / Retail Media!', 'md'), 'pitch-q3-retail-media.md');
-		ok('Deck-Export liefert public-safe Markdown/JSON ohne Source oder Speaker Notes');
+		ok('Owner-Export behält Original-Source; ein gefälschter Nicht-Owner bleibt ohne Source oder Notes');
 
 		assert.equal(teamIdForEmail('Lucas@Example.COM'), 'team_example.com');
 		assert.deepEqual(accountProfileFromSession({ email: 'Lucas@Example.COM', userId: 'user-lucas' }), {
@@ -757,12 +881,24 @@ Kurz.`;
 		recordViewerEvent(id, { type: 'reaction', reaction: '🔥', slide: 1 });
 		recordViewerEvent(id, { type: 'question', text: 'Geheime Frage', slide: 1 });
 		recordViewerEvent(id, { type: 'bookmark', slide: 1 });
-		endRoom(id, presenterToken);
+		const firstEnd = endRoom(id, presenterToken);
+		assert.equal(firstEnd.ok, true);
+		assert.deepEqual(firstEnd.questions, [{ text: 'Geheime Frage', slide: 1, ts: firstEnd.questions?.[0]?.ts }]);
+		assert.equal(firstEnd.endedAt, getRoom(id)?.endedAt);
+		assert.deepEqual(firstEnd.stats, getRoom(id)?.stats);
+		const secondEnd = endRoom(id, presenterToken);
+		assert.equal(secondEnd.ok, false);
+		assert.equal(secondEnd.status, 410);
+		assert.equal(secondEnd.code, 'already_ended');
+		assert.deepEqual(secondEnd.questions, firstEnd.questions);
+		assert.equal(secondEnd.endedAt, firstEnd.endedAt);
+		assert.deepEqual(secondEnd.stats, firstEnd.stats);
 		const replay = getReplay(id)!;
 		assert.equal(replay.ended, true);
 		assert.ok(replay.events.some((e) => e.type === 'slide' && e.slide === 1));
 		assert.ok(replay.events.some((e) => e.type === 'end'));
-		ok('Replay/VOD hält Slide- und Event-Timeline nach Session-Ende vor');
+		assert.equal(replay.events.filter((event) => event.type === 'end').length, 1);
+		ok('Replay/VOD hält Timeline vor und zweites Beenden liefert 410 already_ended');
 
 		const takeaway = buildTakeaway(replay);
 		assert.equal(takeaway.bookmarkCount, 1);
@@ -899,14 +1035,59 @@ Kurz.`;
 
 		const calls: Array<{ sql: string; params: unknown[] }> = [];
 		const store = new PostgresActivityStore({ async query(sql: string, params: unknown[] = []) { calls.push({ sql, params }); return { rows: [] }; } }, () => 'event1');
-		await store.upsertReplaySession({ roomId: 'room1', deckId: 'deck1', slides: parseDeck('# Persisted'), stats: replay.stats, ended: true, protected: true, ts: 123 });
+		const pinVerifier = createPinVerifier('room1', '1234', 'secret');
+		await store.upsertReplaySession({ roomId: 'room1', deckId: 'deck1', slides: parseDeck('# Persisted'), stats: replay.stats, ended: true, protected: true, pinVerifier, ts: 123 });
 		await store.recordReplayEvent({ roomId: 'room1', deckId: 'deck1', event: { type: 'end', slide: 0, ts: 124 } });
+		assert.equal(await store.verifyReplayPin('room1', pinVerifier), false);
 		await store.recordFollow({ email: 'test@example.com', deckId: 'deck1', roomId: 'room1', createdAt: 125 });
-		assert.ok(calls.some((c) => c.sql.includes('replay_sessions')));
+		const replayUpsert = calls.find((call) => call.sql.includes('ON CONFLICT (room_id)'));
+		assert.ok(replayUpsert);
+		assert.match(replayUpsert.sql, /WHERE EXCLUDED\.updated_at >= replay_sessions\.updated_at/);
+		assert.match(replayUpsert.sql, /NOT replay_sessions\.ended OR EXCLUDED\.ended/);
 		assert.ok(calls.some((c) => c.sql.includes('protected')));
+		assert.ok(calls.some((c) => c.sql.includes('pin_verifier')));
 		assert.ok(calls.some((c) => c.sql.includes('INSERT INTO events')));
 		assert.ok(calls.some((c) => c.sql.includes('INSERT INTO follows')));
 		ok('PostgresActivityStore persistiert Replay-Session, Events und Follows');
+		ok('Replay-Upserts ignorieren ältere Writes und lassen ended nicht auf false zurückfallen');
+
+		let legacyQueries = 0;
+		const legacyStore = new PostgresActivityStore({
+			async query(sql: string) {
+				legacyQueries += 1;
+				assert.match(sql, /pin_verifier/);
+				return { rows: [{ room_id: 'legacy-pin', slides: [], stats: replay.stats, ended: true, protected: true, pin_verifier: null }] };
+			}
+		});
+		assert.equal(await legacyStore.getReplay('legacy-pin'), null);
+		assert.equal(legacyQueries, 1, 'Legacy-PIN-Replay lädt keine Events und wird wie unbekannt behandelt');
+		ok('Geschützte Replay-Zeilen ohne PIN-Verifier werden nicht als entsperrbare Replays angeboten');
+
+		const timingWarnings: string[] = [];
+		assert.deepEqual(resolveEndedRoomTiming('5000', (message) => timingWarnings.push(message)), { ttlMs: 5_000, sweepIntervalMs: 10_000 });
+		assert.deepEqual(resolveEndedRoomTiming('4999', (message) => timingWarnings.push(message)), { ttlMs: 30 * 60 * 1000, sweepIntervalMs: 5 * 60 * 1000 });
+		assert.deepEqual(resolveEndedRoomTiming('kein-wert', (message) => timingWarnings.push(message)), { ttlMs: 30 * 60 * 1000, sweepIntervalMs: 5 * 60 * 1000 });
+		assert.equal(timingWarnings.length, 2);
+		assert.ok(timingWarnings.every((message) => message.includes('EB_ENDED_ROOM_TTL_MS')));
+		ok('Ended-Room-TTL und Sweep-Intervall haben Floors und loggen Fehlkonfigurationen');
+
+		removeRoom(id);
+		const swept = createRoom(parseDeck('# Sweep'));
+		endRoom(swept.id, swept.presenterToken);
+		const sweptAt = getRoom(swept.id)?.endedAt;
+		assert.equal(typeof sweptAt, 'number');
+		sweepRooms(sweptAt! + ENDED_ROOM_TTL_MS);
+		assert.equal(getRoom(swept.id), undefined);
+		const idle = createRoom(parseDeck('# Idle'));
+		const evicted = createRoom(parseDeck('# Evict'));
+		endRoom(evicted.id, evicted.presenterToken);
+		assert.equal(evictRoomForCapacity(), evicted.id);
+		assert.equal(getRoom(evicted.id), undefined);
+		assert.ok(getRoom(idle.id), 'Capacity-Eviction entfernt beendete Rooms vor aktiven idle Rooms');
+		assert.equal(evictRoomForCapacity(), idle.id);
+		assert.equal(getRoom(idle.id), undefined);
+		assert.equal(removeRoom(idle.id), false);
+		ok('Ended-TTL-Sweep und Capacity-Eviction entfernen beendete Rooms deterministisch');
 	}
 
 	console.log(`\nALL PASS — ${passed} assertions.`);

@@ -8,9 +8,10 @@ import { isProductionRuntime } from '$lib/server/auth';
 export type ReplaySnapshot = { id: string; slides: Slide[]; events: ReplayEvent[]; stats: RoomStats; ended: boolean; protected?: boolean };
 
 export type ActivityStore = {
-	upsertReplaySession(input: { roomId: string; deckId?: string; slides: Slide[]; stats: RoomStats; ended: boolean; protected?: boolean; ts: number }): Promise<void>;
+	upsertReplaySession(input: { roomId: string; deckId?: string; slides: Slide[]; stats: RoomStats; ended: boolean; protected?: boolean; pinVerifier?: string; ts: number }): Promise<void>;
 	recordReplayEvent(input: { roomId: string; deckId?: string; event: ReplayEvent }): Promise<void>;
 	getReplay(roomId: string): Promise<ReplaySnapshot | null>;
+	verifyReplayPin(roomId: string, pinVerifier: string): Promise<boolean>;
 	recordFollow(input: { email: string; deckId?: string; roomId?: string; createdAt: number }): Promise<void>;
 	removeFollowsByEmail(email: string): Promise<number>;
 };
@@ -22,18 +23,21 @@ const EMPTY_STATS: RoomStats = { joins: 0, currentViewers: 0, peakConcurrent: 0,
 export class PostgresActivityStore implements ActivityStore {
 	constructor(private db: SqlClient, private makeId: () => string = () => nanoid(12)) {}
 
-	async upsertReplaySession(input: { roomId: string; deckId?: string; slides: Slide[]; stats: RoomStats; ended: boolean; protected?: boolean; ts: number }): Promise<void> {
+	async upsertReplaySession(input: { roomId: string; deckId?: string; slides: Slide[]; stats: RoomStats; ended: boolean; protected?: boolean; pinVerifier?: string; ts: number }): Promise<void> {
 		await this.db.query(
-			`INSERT INTO replay_sessions (room_id, deck_id, slides, stats, ended, protected, created_at, updated_at)
-			 VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $7)
+			`INSERT INTO replay_sessions (room_id, deck_id, slides, stats, ended, protected, pin_verifier, created_at, updated_at)
+			 VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $8)
 			 ON CONFLICT (room_id) DO UPDATE
 			 SET deck_id = COALESCE(EXCLUDED.deck_id, replay_sessions.deck_id),
 			     slides = EXCLUDED.slides,
 			     stats = EXCLUDED.stats,
 			     ended = EXCLUDED.ended,
 			     protected = EXCLUDED.protected,
-			     updated_at = EXCLUDED.updated_at`,
-			[input.roomId, input.deckId ?? null, JSON.stringify(input.slides), JSON.stringify(input.stats), input.ended, Boolean(input.protected), input.ts]
+			     pin_verifier = COALESCE(EXCLUDED.pin_verifier, replay_sessions.pin_verifier),
+				     updated_at = EXCLUDED.updated_at
+				 WHERE EXCLUDED.updated_at >= replay_sessions.updated_at
+				   AND (NOT replay_sessions.ended OR EXCLUDED.ended)`,
+			[input.roomId, input.deckId ?? null, JSON.stringify(input.slides), JSON.stringify(input.stats), input.ended, Boolean(input.protected), input.pinVerifier ?? null, input.ts]
 		);
 	}
 
@@ -47,11 +51,12 @@ export class PostgresActivityStore implements ActivityStore {
 
 	async getReplay(roomId: string): Promise<ReplaySnapshot | null> {
 		const session = await this.db.query(
-			`SELECT room_id, slides, stats, ended, protected FROM replay_sessions WHERE room_id = $1`,
+			`SELECT room_id, slides, stats, ended, protected, pin_verifier FROM replay_sessions WHERE room_id = $1`,
 			[roomId]
 		);
-		const row = session.rows[0] as { room_id?: unknown; slides?: unknown; stats?: unknown; ended?: unknown; protected?: unknown } | undefined;
+		const row = session.rows[0] as { room_id?: unknown; slides?: unknown; stats?: unknown; ended?: unknown; protected?: unknown; pin_verifier?: unknown } | undefined;
 		if (!row) return null;
+		if (Boolean(row.protected) && (typeof row.pin_verifier !== 'string' || row.pin_verifier.length === 0)) return null;
 		const events = await this.db.query(
 			`SELECT type, slide, payload, created_at FROM events WHERE room_id = $1 ORDER BY created_at ASC`,
 			[roomId]
@@ -64,6 +69,14 @@ export class PostgresActivityStore implements ActivityStore {
 			protected: Boolean(row.protected),
 			events: events.rows.map(rowToReplayEvent).filter((e): e is ReplayEvent => Boolean(e))
 		};
+	}
+
+	async verifyReplayPin(roomId: string, pinVerifier: string): Promise<boolean> {
+		const result = await this.db.query(
+			`SELECT 1 FROM replay_sessions WHERE room_id = $1 AND protected = TRUE AND pin_verifier = $2`,
+			[roomId, pinVerifier]
+		);
+		return result.rows.length > 0;
 	}
 
 	async recordFollow(input: { email: string; deckId?: string; roomId?: string; createdAt: number }): Promise<void> {

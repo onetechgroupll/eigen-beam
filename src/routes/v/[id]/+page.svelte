@@ -14,7 +14,7 @@
 	let live = $state(initial(() => data.current));
 	let viewing = $state(initial(() => data.current));
 	let reveal = $state(999);
-	let ended = $state(false);
+	let ended = $state(initial(() => data.ended));
 	let showOptions = $state(false);
 	let showQuestion = $state(false);
 	let question = $state('');
@@ -25,7 +25,7 @@
 
 	function applyLive(n: number) { const wasFollowing = viewing >= live; live = n; if (wasFollowing) viewing = n; reveal = 0; }
 	function connect() {
-		if (!unlocked) return;
+		if (!unlocked || ended) return;
 		lastConnect = Date.now(); es?.close(); es = new EventSource(`/v/${data.id}/stream`);
 		es.addEventListener('sync', (e) => applyLive(+(e as MessageEvent).data));
 		es.addEventListener('slide', (e) => applyLive(+(e as MessageEvent).data));
@@ -41,7 +41,7 @@
 		if (e.key === 'ArrowLeft') { e.preventDefault(); back(); }
 		if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); fwd(); }
 	}
-	async function event(type: string, extra: Record<string, unknown> = {}) { if (!unlocked) return; await fetch(`/v/${data.id}/event`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type, slide: viewing, ...extra }) }); }
+	async function event(type: string, extra: Record<string, unknown> = {}) { if (!unlocked || ended) return; await fetch(`/v/${data.id}/event`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type, slide: viewing, ...extra }) }); }
 	async function sendQuestion() { const text = question.trim(); if (!text) return; question = ''; await event('question', { text }); showQuestion = false; showOptions = false; }
 	function markViewerOpen() {
 		try {
@@ -59,8 +59,8 @@
 		location.reload();
 	}
 	onMount(() => {
-		connect(); markViewerOpen();
-		const onVis = () => { if (document.visibilityState !== 'visible') return; if (Date.now() - lastConnect < 1500) return; connect(); event('reopen'); };
+		if (!ended) { connect(); markViewerOpen(); }
+		const onVis = () => { if (ended || document.visibilityState !== 'visible') return; if (Date.now() - lastConnect < 1500) return; connect(); event('reopen'); };
 		document.addEventListener('visibilitychange', onVis);
 		return () => { document.removeEventListener('visibilitychange', onVis); es?.close(); };
 	});
@@ -73,7 +73,7 @@
 		<div class="mono tag">EIGEN.BEAM</div><h1>PIN erforderlich.</h1>
 		<label class="sr-only" for="room-pin">PIN</label>
 		<input id="room-pin" class="pin" bind:value={pin} type="password" inputmode="numeric" autocomplete="one-time-code" placeholder="PIN" onkeydown={(e) => e.key === 'Enter' && unlock()} />
-		<button class="cta" onclick={unlock}>Beitreten</button>{#if pinError}<p>{pinError}</p>{/if}
+		<button class="cta" onclick={unlock}>{data.ended ? 'Replay entsperren' : 'Beitreten'}</button>{#if pinError}<p>{pinError}</p>{/if}
 	</main>
 {:else if ended}
 	<main class="ended">
@@ -82,7 +82,7 @@
 		<p>{endCta.body}</p>
 		<div class="end-actions">
 			<a class="cta" href={`/replay/${data.id}`}>{endCta.primary}</a>
-			<a class="cta secondary" href="/new">{endCta.secondary} →</a>
+			<a class="quiet-link" href="/new">{endCta.secondary} →</a>
 		</div>
 		<p class="end-note">Content-first, live synchron, ohne Beamer.</p>
 	</main>
@@ -142,8 +142,9 @@
 	.ended .tag, .tag { font-size: 11px; letter-spacing: 3px; color: var(--muted); }
 	.ended h1 { font-size: clamp(28px, 7vw, 44px); letter-spacing: -1px; font-weight: 820; }
 	.ended p { max-width: 420px; color: var(--muted); line-height: 1.5; }
-	.end-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
-	.cta.secondary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+	.end-actions { display: grid; justify-items: center; gap: 10px; }
+	.ended .cta { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-size: 15px; padding: 10px 20px; }
+	.quiet-link { min-height: 44px; display: inline-flex; align-items: center; color: var(--muted); font-size: 13px; font-weight: 760; text-decoration: none; }
 	.end-note { font-size: 12px; }
 	.pin { border: 1px solid var(--hair); background: var(--surface); color: var(--fg); min-height: 44px; border-radius: 999px; text-align: center; font: inherit; }
 	.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

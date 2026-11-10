@@ -87,6 +87,10 @@ export function createPinUnlockToken(roomId: string, secret: string, now = Date.
 	return `${body}.${sign(body, secret)}`;
 }
 
+export function createPinVerifier(roomId: string, pin: string, secret: string): string {
+	return sign(`pin:${roomId}:${pin.trim()}`, secret);
+}
+
 export function verifyPinUnlockToken(token: string | undefined, roomId: string, secret: string, now = Date.now()): boolean {
 	if (!token) return false;
 	const [body, sig, extra] = token.split('.');
