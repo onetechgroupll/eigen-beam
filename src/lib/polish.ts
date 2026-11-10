@@ -53,10 +53,10 @@ export function conversionCta(context: ConversionCtaContext): ConversionCta {
 	if (context === 'viewer-ended') {
 		return {
 			kicker: 'SESSION BEENDET',
-			title: 'Das war kein PDF. Das war live synchron.',
-			body: 'Kein PDF zum Nachschicken: Sieh dir die Session nochmal an oder bau direkt dein eigenes Phone-Deck für den nächsten Raum ohne Beamer.',
+			title: 'Präsentation beendet.',
+			body: 'Kein PDF nötig: Sieh dir die Session im Replay noch einmal an.',
 			primary: 'Replay ansehen',
-			secondary: 'Eigenes Deck bauen'
+			secondary: 'Eigenes Deck erstellen'
 		};
 	}
 	if (context === 'share') {

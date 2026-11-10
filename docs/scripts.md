@@ -8,7 +8,7 @@ All commands are run from the repository root.
 | `bun run doctor` | Check local tool/env readiness. | No secrets printed; warnings are non-fatal. |
 | `bun run docs:check` | Validate Markdown links/fences plus JSON/YAML shape. | Fast docs-only gate; also used by CI docs-only path. |
 | `bun run check` | `svelte-kit sync` + `svelte-check`. | Canonical type/a11y gate. |
-| `bun run verify:c1a` | Repository assertion suite. | Expected: `ALL PASS — 68 assertions.` |
+| `bun run verify:c1a` | Repository assertion suite. | Expected: `ALL PASS — 83 assertions.` |
 | `bun run build` | Production SvelteKit adapter-node build. | Clean stale build artifacts if chunk resolution fails. |
 | `bun run start` | Run `node build`. | Requires prior `bun run build`. |
 | `bun run preview` | Alias for `node build`. | Same as `start`. |
@@ -29,6 +29,7 @@ All commands are run from the repository root.
 | `EB_DATA_DIR` | file/outbox stores | Local data root. |
 | `EB_DECK_STORE` | app/build/smokes | `file`, `memory` or `postgres`. |
 | `EB_ACTIVITY_STORE` | replay/follows | `off`, local/file modes or `postgres`. |
+| `EB_ENDED_ROOM_TTL_MS` | live rooms | Ended-room retention in milliseconds; defaults to 30 minutes, minimum 5 seconds. Invalid/shorter values fall back with a boot warning. |
 | `EB_MAIL_PROVIDER` | auth/follow | `outbox`, `console`, `resend`, `postmark`. |
 | `EB_MAGIC_LINK_SECRET` | auth | Required for production-like auth. |
 | `DATABASE_URL` | migrations/postgres | Required for Postgres modes. |

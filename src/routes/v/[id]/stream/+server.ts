@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import { authSigningSecret, verifyPinUnlockToken } from '$lib/server/auth';
-import { getRoom, subscribe, MAX_SUBSCRIBERS_PER_ROOM } from '$lib/server/rooms';
+import { getReplayPersistent, getRoom, subscribe, MAX_SUBSCRIBERS_PER_ROOM } from '$lib/server/rooms';
 
 // SSE-Stream Server→Viewer (Eng-Review: kein WebSocket, asymmetrischer Flow).
 // Schickt initial `sync`, danach `slide` bei jedem Wechsel, `ended` beim Schließen.
@@ -10,9 +10,15 @@ import { getRoom, subscribe, MAX_SUBSCRIBERS_PER_ROOM } from '$lib/server/rooms'
 // Ohne Reaping blieben Subscriber + 10s-Heartbeats für immer im Room und akkumulierten
 // über die Session → Broadcasts wurden langsam. Jetzt: erste fehlgeschlagene Schreib-
 // operation (Heartbeat oder Push) räumt die tote Verbindung auf.
-export const GET: RequestHandler = ({ params, cookies }) => {
+export const GET: RequestHandler = async ({ params, cookies }) => {
 	const room = getRoom(params.id);
-	if (!room || room.ended) return new Response('ended', { status: 410 });
+	if (!room || room.ended) {
+		const replay = await getReplayPersistent(params.id);
+		if (!replay) return new Response('ended', { status: 410 });
+		if (replay.protected && !verifyPinUnlockToken(cookies.get(`eb_pin_${params.id}`), params.id, authSigningSecret())) return new Response('pin required', { status: 403 });
+		const current = room?.current ?? [...replay.events].reverse().find((event) => event.type === 'end' || event.type === 'slide')?.slide ?? 0;
+		return endedEventResponse(current);
+	}
 	if (room.pin && !verifyPinUnlockToken(cookies.get(`eb_pin_${params.id}`), params.id, authSigningSecret())) return new Response('pin required', { status: 403 });
 	if (room.subscribers.size >= MAX_SUBSCRIBERS_PER_ROOM) return new Response('busy', { status: 503 });
 
@@ -82,3 +88,14 @@ export const GET: RequestHandler = ({ params, cookies }) => {
 		}
 	});
 };
+
+function endedEventResponse(current: number): Response {
+	return new Response(`event: ended\ndata: ${current}\n\n`, {
+		headers: {
+			'content-type': 'text/event-stream',
+			'cache-control': 'no-cache',
+			connection: 'close',
+			'x-accel-buffering': 'no'
+		}
+	});
+}

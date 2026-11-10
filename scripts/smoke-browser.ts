@@ -44,12 +44,65 @@ async function main() {
 		await page.getByRole('button', { name: /Weiter/ }).click({ timeout: 10_000 });
 		await page.waitForTimeout(300);
 
-		await page.goto(`${BASE}/v/${roomId}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-		await page.getByRole('button', { name: /Optionen/i }).waitFor({ timeout: 5_000 });
-		await page.getByText(/Links nachlesen · LIVE hält dich synchron/i).waitFor({ timeout: 5_000 });
-		assert.equal(await page.getByRole('button', { name: /Weiter oder nächster Reveal/i }).count(), 0, 'Viewer benennt Rechts-Tap nicht mehr als freies Weiter');
-		assert.equal(await page.getByText('Tippe rechts weiter', { exact: true }).count(), 0, 'Viewer zeigt keinen zweiten Tap-Hint-Pill');
+		const viewerPage = await context.newPage();
+		viewerPage.on('console', (message) => {
+			if (['error', 'warning'].includes(message.type()) && !isIgnorableConsole(message)) consoleFailures.push({ type: message.type(), text: message.text() });
+		});
+		viewerPage.on('pageerror', (error) => consoleFailures.push({ type: 'pageerror', text: String(error) }));
+		await viewerPage.goto(`${BASE}/v/${roomId}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+		await viewerPage.getByRole('button', { name: /Optionen/i }).waitFor({ timeout: 5_000 });
+		await viewerPage.getByText(/Links nachlesen · LIVE hält dich synchron/i).waitFor({ timeout: 5_000 });
+		assert.equal(await viewerPage.getByRole('button', { name: /Weiter oder nächster Reveal/i }).count(), 0, 'Viewer benennt Rechts-Tap nicht mehr als freies Weiter');
+		assert.equal(await viewerPage.getByText('Tippe rechts weiter', { exact: true }).count(), 0, 'Viewer zeigt keinen zweiten Tap-Hint-Pill');
 		ok('Viewer zeigt Premium-Stage mit intentionalem Options-Sheet');
+
+		await page.evaluate(async () => {
+			const response = await fetch(`${location.pathname}/slide`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ slide: 999 })
+			});
+			if (!response.ok) throw new Error(`Letzte Folie fehlgeschlagen: ${response.status}`);
+		});
+		await viewerPage.evaluate(async () => {
+			const response = await fetch(`${location.pathname}/event`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ type: 'question', text: 'Wie geht es nach der Session weiter?' })
+			});
+			if (!response.ok) throw new Error(`Testfrage fehlgeschlagen: ${response.status}`);
+		});
+		const unauthorisedExport = await fetch(`${BASE}/present/${roomId}/questions`);
+		assert.equal(unauthorisedExport.status, 403, 'Fragen-Export ohne Presenter-Cookie muss 403 liefern');
+		await page.reload({ waitUntil: 'domcontentloaded', timeout: 45_000 });
+		await page.getByRole('button', { name: /Session beenden →/i }).click({ timeout: 10_000 });
+		const endDialog = page.getByRole('dialog', { name: /Session für alle beenden/i });
+		await endDialog.getByText(/Alle Viewer wechseln sofort zum End-Screen/i).waitFor({ timeout: 5_000 });
+		const questionDownload = page.waitForEvent('download', { timeout: 10_000 });
+		await endDialog.getByRole('button', { name: /^Exportieren und beenden$/i }).click({ timeout: 10_000 });
+		assert.match((await questionDownload).suggestedFilename(), /-fragen\.md$/);
+		await page.getByRole('heading', { name: /^Session beendet\.$/i }).waitFor({ timeout: 5_000 });
+		await viewerPage.getByRole('link', { name: /Replay ansehen/i }).waitFor({ timeout: 5_000 });
+		ok('Session-Ende exportiert Fragen nach dem ACK und schaltet Presenter/Viewer auf den Endzustand');
+
+		await page.reload({ waitUntil: 'domcontentloaded', timeout: 45_000 });
+		await page.getByRole('heading', { name: /^Session beendet\.$/i }).waitFor({ timeout: 5_000 });
+		const beforeDoubleEndFailures = consoleFailures.length;
+		const doubleEnd = await page.evaluate(async () => {
+			const response = await fetch(`${location.pathname}/slide`, { method: 'DELETE' });
+			return { status: response.status, body: await response.json() };
+		});
+		assert.equal(doubleEnd.status, 410);
+		assert.match(String((doubleEnd.body as { message?: unknown }).message), /bereits beendet/i);
+		assert.equal(typeof (doubleEnd.body as { endedAt?: unknown }).endedAt, 'number');
+		assert.equal((doubleEnd.body as { stats?: { questions?: unknown } }).stats?.questions, 1);
+		assert.equal((doubleEnd.body as { questions?: unknown[] }).questions?.length, 1);
+		const expectedDoubleEndFailures = consoleFailures.slice(beforeDoubleEndFailures);
+		if (expectedDoubleEndFailures.every((failure) => /Failed to load resource: the server responded with a status of 410/i.test(failure.text))) {
+			consoleFailures.splice(beforeDoubleEndFailures);
+		}
+		ok('Presenter-Reload bleibt beendet und doppeltes DELETE liefert bereits beendet');
+		await viewerPage.close();
 
 		await page.goto(`${BASE}/replay/${roomId}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
 		await page.getByText(/NEXT BEST ACTION/i).waitFor({ timeout: 5_000 });
@@ -104,6 +157,7 @@ async function main() {
 		await browser.close();
 	}
 	console.log(`\nBROWSER SMOKE PASS — ${passed} checks.`);
+	console.log('MANUAL QA — echten Offline-Wechsel vor dem Session-Ende und anschließenden Reconnect auf einem Mobilgerät prüfen.');
 }
 
 async function expectNoConsoleFailures(failures: Array<{ type: string; text: string }>) {

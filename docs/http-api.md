@@ -149,7 +149,9 @@ Errors: `400` (no file), `413` (too large), `422` (no text found), `501` (voice 
 
 ### End a room
 
-`DELETE /present/:id/slide` → `{ ok: true }`. Presenter cookie required. Viewers receive `ended`.
+`DELETE /present/:id/slide` → `{ ok: true, endedAt, stats, questions: [{ text, slide, ts }] }`. Presenter cookie required. The presenter-only question list lets **Export and end** use the complete server state without exposing question text through public replay routes. Viewers and presenter streams receive `ended` and close. Repeating the request for a retained ended room returns `410` with `{ error: true, code: "already_ended", message: "Session bereits beendet.", endedAt, stats, questions: [...] }`, so a lost first acknowledgement can be retried without inventing the end timestamp or counters client-side. Unknown rooms return `404`; wrong presenter cookies return `403`.
+
+`GET /present/:id/questions` downloads the complete presenter-only question list as Markdown while the room is retained. It uses the same presenter cookie, returns `403` for the wrong cookie, `404` for an unknown room and `410` once the room has been removed after the ended-room retention window (a persisted replay may still exist). Public replay APIs continue to blank question text.
 
 ### Presenter event stream
 
@@ -163,11 +165,11 @@ Errors: `400` (no file), `413` (too large), `422` (no text found), `501` (voice 
 | `bookmark` | `{ slide, ts }` |
 | `ended` | `{ slide, ts }` |
 
-`403` wrong cookie, `404` unknown room, `410` ended.
+`403` wrong cookie, `404` unknown room, `410` ended. Reloading the presenter page itself remains available while the ended-room TTL runs and renders the server-owned end summary.
 
 ### Viewer stream
 
-`GET /v/:id/stream` (SSE). Events `sync`, `slide` and `ended`; `data` is the current zero-based slide index. A `: hb` comment every 10 s. `403 pin required`, `410 ended`, `503 busy` (300 viewers).
+`GET /v/:id/stream` (SSE). Events `sync`, `slide` and `ended`; `data` is the current zero-based slide index. A `: hb` comment every 10 s. A reconnect after session end receives a one-shot `ended` event and closes, including when an ended replay is found in the activity store. `403 pin required`, `410` only when neither a room nor replay remains, `503 busy` (300 viewers).
 
 ### Send a viewer signal
 
@@ -188,7 +190,7 @@ Errors: `400` (no file), `413` (too large), `422` (no text found), `501` (voice 
 
 ### Unlock a PIN room
 
-`POST /api/rooms/:id/pin` with `{ "pin": "1234" }` · limit 10 / 10 min per IP and room → sets `eb_pin_<id>`, `{ ok: true }`. `403` on a wrong PIN.
+`POST /api/rooms/:id/pin` with `{ "pin": "1234" }` · limit 10 / 10 min per IP and room → sets `eb_pin_<id>`, `{ ok: true }`. `403` on a wrong PIN. With the Postgres activity store, ended replays stored after migration 005 remain unlockable after room eviction or restart through a persisted HMAC verifier; the PIN itself is not persisted. Older protected replay rows without a verifier are treated as unknown, so the viewer route returns its normal `410` end state instead of offering a PIN form that cannot succeed.
 
 ### Room stats for scripts
 

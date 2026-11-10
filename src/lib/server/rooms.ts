@@ -2,6 +2,8 @@ import { nanoid } from 'nanoid';
 import type { Slide } from '$lib/decks';
 import { toPublicSlides } from '$lib/decks';
 import { getActivityStore, persistBestEffort } from '$lib/server/activity-store';
+import { authSigningSecret, createPinVerifier } from '$lib/server/auth';
+import { env } from 'node:process';
 
 type ViewerSubscriber = (current: number, ended: boolean) => void;
 export type PresenterEvent =
@@ -33,6 +35,7 @@ export type ReplayEvent =
 	| { type: 'end'; slide: number; ts: number };
 
 export type ReplaySnapshot = { id: string; slides: Slide[]; events: ReplayEvent[]; stats: RoomStats; ended: boolean; protected?: boolean };
+export type PresenterQuestion = { text: string; slide: number; ts: number };
 
 export type Room = {
 	id: string;
@@ -48,6 +51,7 @@ export type Room = {
 	events: ReplayEvent[];
 	createdAt: number;
 	lastActivity: number;
+	endedAt?: number;
 };
 
 type PresenterClaim = { roomId: string; presenterToken: string; expiresAt: number };
@@ -56,6 +60,13 @@ const rooms = new Map<string, Room>();
 const presenterClaims = new Map<string, PresenterClaim>();
 const MAX_ROOMS = 500;
 const ROOM_TTL_MS = 12 * 60 * 60 * 1000;
+const DEFAULT_ENDED_ROOM_TTL_MS = 30 * 60 * 1000;
+const MIN_ENDED_ROOM_TTL_MS = 5_000;
+const MIN_ROOM_SWEEP_INTERVAL_MS = 10_000;
+const MAX_ROOM_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+const endedRoomTiming = resolveEndedRoomTiming(env.EB_ENDED_ROOM_TTL_MS);
+export const ENDED_ROOM_TTL_MS = endedRoomTiming.ttlMs;
+export const ROOM_SWEEP_INTERVAL_MS = endedRoomTiming.sweepIntervalMs;
 const PRESENTER_CLAIM_TTL_MS = 2 * 60 * 1000;
 export const MAX_SUBSCRIBERS_PER_ROOM = 300;
 export const MAX_PRESENTER_SUBSCRIBERS_PER_ROOM = 10;
@@ -63,23 +74,35 @@ const ALLOWED_REACTIONS = new Set(['👍', '🔥', '💡', '❤️', '👏', '�
 
 function evictOldestIfFull(): void {
 	if (rooms.size < MAX_ROOMS) return;
-	let oldestId: string | null = null;
-	let oldest = Infinity;
-	for (const [id, r] of rooms) {
-		if (r.lastActivity < oldest) { oldest = r.lastActivity; oldestId = id; }
-	}
-	if (oldestId) closeRoom(rooms.get(oldestId)!, true);
+	evictRoomForCapacity();
 }
 
-function sweep(): void {
-	const now = Date.now();
-	for (const [, r] of [...rooms]) if (now - r.lastActivity > ROOM_TTL_MS) closeRoom(r, true);
+export function evictRoomForCapacity(): string | null {
+	const candidates = [...rooms.values()];
+	const ended = candidates.filter((candidate) => candidate.ended).sort((a, b) => a.lastActivity - b.lastActivity);
+	const idle = candidates.filter((candidate) => !candidate.ended).sort((a, b) => a.lastActivity - b.lastActivity);
+	const room = ended[0] ?? idle[0];
+	if (!room) return null;
+	closeRoom(room);
+	removeRoom(room.id);
+	return room.id;
+}
+
+export function sweepRooms(now = Date.now()): void {
+	for (const room of [...rooms.values()]) {
+		if (room.ended) {
+			if (now - (room.endedAt ?? room.lastActivity) >= ENDED_ROOM_TTL_MS) removeRoom(room.id);
+		} else if (now - room.lastActivity > ROOM_TTL_MS) {
+			closeRoom(room, now);
+			removeRoom(room.id);
+		}
+	}
 	for (const [token, claim] of [...presenterClaims]) if (claim.expiresAt <= now || !rooms.has(claim.roomId)) presenterClaims.delete(token);
 }
 
 const g = globalThis as unknown as { __ebSweep?: ReturnType<typeof setInterval> };
 if (!g.__ebSweep) {
-	g.__ebSweep = setInterval(sweep, 5 * 60 * 1000);
+	g.__ebSweep = setInterval(() => sweepRooms(), ROOM_SWEEP_INTERVAL_MS);
 	g.__ebSweep.unref?.();
 }
 
@@ -130,6 +153,13 @@ export function verifyRoomPin(id: string, pin: string): boolean {
 	return Boolean(room?.pin && pin === room.pin);
 }
 
+export async function verifyRoomPinPersistent(id: string, pin: string): Promise<boolean> {
+	if (verifyRoomPin(id, pin)) return true;
+	const store = getActivityStore();
+	if (!store || !pin) return false;
+	return store.verifyReplayPin(id, createPinVerifier(id, pin, authSigningSecret()));
+}
+
 export function setSlide(id: string, token: string, n: number): { ok: boolean; status?: number; current?: number } {
 	const room = rooms.get(id);
 	if (!room || room.ended) return { ok: false, status: 410 };
@@ -143,12 +173,19 @@ export function setSlide(id: string, token: string, n: number): { ok: boolean; s
 	return { ok: true, current: clamped };
 }
 
-export function endRoom(id: string, token: string): { ok: boolean; status?: number } {
+export function endRoom(id: string, token: string): { ok: boolean; status?: number; code?: 'already_ended'; endedAt?: number; stats?: RoomStats; questions?: PresenterQuestion[] } {
 	const room = rooms.get(id);
 	if (!room) return { ok: false, status: 404 };
 	if (token !== room.presenterToken) return { ok: false, status: 403 };
+	if (room.ended) return { ok: false, status: 410, code: 'already_ended', endedAt: room.endedAt ?? room.lastActivity, stats: { ...room.stats }, questions: presenterQuestions(room) };
 	closeRoom(room);
-	return { ok: true };
+	return { ok: true, endedAt: room.endedAt, stats: { ...room.stats }, questions: presenterQuestions(room) };
+}
+
+export function removeRoom(id: string): boolean {
+	const removed = rooms.delete(id);
+	for (const [token, claim] of presenterClaims) if (claim.roomId === id) presenterClaims.delete(token);
+	return removed;
 }
 
 export function subscribe(id: string, fn: ViewerSubscriber): (() => void) | null {
@@ -242,23 +279,54 @@ function pushRoomEvent(room: Room, event: ReplayEvent): void {
 function persistRoom(room: Room): void {
 	const store = getActivityStore();
 	if (!store) return;
-	persistBestEffort(store.upsertReplaySession({ roomId: room.id, deckId: room.deckId, slides: toPublicSlides(room.slides), stats: room.stats, ended: room.ended, protected: Boolean(room.pin), ts: room.lastActivity }));
+	persistBestEffort(store.upsertReplaySession({
+		roomId: room.id,
+		deckId: room.deckId,
+		slides: toPublicSlides(room.slides),
+		stats: room.stats,
+		ended: room.ended,
+		protected: Boolean(room.pin),
+		pinVerifier: room.pin ? createPinVerifier(room.id, room.pin, authSigningSecret()) : undefined,
+		ts: room.lastActivity
+	}));
 }
 
-function closeRoom(room: Room, remove = false): void {
+function closeRoom(room: Room, now = Date.now()): void {
 	if (room.ended) return;
 	room.ended = true;
-	room.lastActivity = Date.now();
+	room.endedAt = now;
+	room.lastActivity = now;
 	pushRoomEvent(room, { type: 'end', slide: room.current, ts: room.lastActivity });
 	for (const fn of [...room.subscribers]) fn(room.current, true);
 	broadcastPresenter(room, { type: 'ended', slide: room.current, ts: room.lastActivity });
 	room.subscribers.clear();
 	room.presenterSubscribers.clear();
-	if (remove) rooms.delete(room.id);
+}
+
+export function resolveEndedRoomTiming(value: string | undefined, warn: (message: string) => void = console.warn): { ttlMs: number; sweepIntervalMs: number } {
+	let ttlMs = DEFAULT_ENDED_ROOM_TTL_MS;
+	if (value !== undefined) {
+		const parsed = Number(value);
+		if (!Number.isFinite(parsed) || Math.floor(parsed) < MIN_ENDED_ROOM_TTL_MS) {
+			warn(`[rooms] EB_ENDED_ROOM_TTL_MS="${value}" ungültig; verwende ${DEFAULT_ENDED_ROOM_TTL_MS} ms (Minimum ${MIN_ENDED_ROOM_TTL_MS} ms).`);
+		} else {
+			ttlMs = Math.floor(parsed);
+		}
+	}
+	return {
+		ttlMs,
+		sweepIntervalMs: Math.max(MIN_ROOM_SWEEP_INTERVAL_MS, Math.min(MAX_ROOM_SWEEP_INTERVAL_MS, ttlMs))
+	};
 }
 
 function publicReplayEvents(events: ReplayEvent[]): ReplayEvent[] {
 	return events.map((event) => event.type === 'question' ? { ...event, text: '' } : event);
+}
+
+function presenterQuestions(room: Room): PresenterQuestion[] {
+	return room.events
+		.filter((event): event is Extract<ReplayEvent, { type: 'question' }> => event.type === 'question')
+		.map(({ text, slide, ts }) => ({ text, slide, ts }));
 }
 
 function broadcastPresenter(room: Room, event: PresenterEvent): void {

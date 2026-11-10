@@ -9,14 +9,14 @@ import { DECK_TEMPLATE, publicSlidesToSource, toPublicSlides, type Deck, type Pu
 import { slideFitProfile } from '../src/lib/slide-quality.ts';
 import { applyQualityFix, deckReadyCheck } from '../src/lib/deck-quality.ts';
 import { MemoryDeckRepository, FileDeckRepository, PostgresDeckRepository } from '../src/lib/server/decks-repo.ts';
-import { createCreatorToken, createMagicToken, createUserSessionToken, userIdForEmail, verifyCreatorToken, verifyMagicToken, verifyUserSessionToken } from '../src/lib/server/auth.ts';
+import { createCreatorToken, createMagicToken, createPinVerifier, createUserSessionToken, userIdForEmail, verifyCreatorToken, verifyMagicToken, verifyUserSessionToken } from '../src/lib/server/auth.ts';
 import { importTextToDeckSource, extractPptxText, extractPdfText } from '../src/lib/server/imports.ts';
 import { transcribeAudio, voiceFileToDeckSource } from '../src/lib/server/voice.ts';
 import { localClarify } from '../src/lib/server/clarity.ts';
 import Anthropic from '@anthropic-ai/sdk';
 import { DEFAULT_CLAUDE_MODEL, claudeModel, parseDeckJson, requestDeckJson } from '../src/lib/server/claude.ts';
 import { sniffImage, S3AssetStore } from '../src/lib/server/assets.ts';
-import { claimPresenterToken, createRoom, endRoom, getReplay, recordViewerEvent, setSlide } from '../src/lib/server/rooms.ts';
+import { claimPresenterToken, createRoom, endRoom, ENDED_ROOM_TTL_MS, evictRoomForCapacity, getReplay, getRoom, recordViewerEvent, removeRoom, resolveEndedRoomTiming, setSlide, sweepRooms } from '../src/lib/server/rooms.ts';
 import { createUnsubToken, escapeHtml, recordFollow, recordFollowDetailed, sanitizeFollowTarget, verifyUnsubToken } from '../src/lib/server/followers.ts';
 import { OutboxEmailProvider, getMailerForEnv, readOutbox } from '../src/lib/server/mailer.ts';
 import { PostgresActivityStore } from '../src/lib/server/activity-store.ts';
@@ -881,12 +881,24 @@ Kurz.`;
 		recordViewerEvent(id, { type: 'reaction', reaction: '🔥', slide: 1 });
 		recordViewerEvent(id, { type: 'question', text: 'Geheime Frage', slide: 1 });
 		recordViewerEvent(id, { type: 'bookmark', slide: 1 });
-		endRoom(id, presenterToken);
+		const firstEnd = endRoom(id, presenterToken);
+		assert.equal(firstEnd.ok, true);
+		assert.deepEqual(firstEnd.questions, [{ text: 'Geheime Frage', slide: 1, ts: firstEnd.questions?.[0]?.ts }]);
+		assert.equal(firstEnd.endedAt, getRoom(id)?.endedAt);
+		assert.deepEqual(firstEnd.stats, getRoom(id)?.stats);
+		const secondEnd = endRoom(id, presenterToken);
+		assert.equal(secondEnd.ok, false);
+		assert.equal(secondEnd.status, 410);
+		assert.equal(secondEnd.code, 'already_ended');
+		assert.deepEqual(secondEnd.questions, firstEnd.questions);
+		assert.equal(secondEnd.endedAt, firstEnd.endedAt);
+		assert.deepEqual(secondEnd.stats, firstEnd.stats);
 		const replay = getReplay(id)!;
 		assert.equal(replay.ended, true);
 		assert.ok(replay.events.some((e) => e.type === 'slide' && e.slide === 1));
 		assert.ok(replay.events.some((e) => e.type === 'end'));
-		ok('Replay/VOD hält Slide- und Event-Timeline nach Session-Ende vor');
+		assert.equal(replay.events.filter((event) => event.type === 'end').length, 1);
+		ok('Replay/VOD hält Timeline vor und zweites Beenden liefert 410 already_ended');
 
 		const takeaway = buildTakeaway(replay);
 		assert.equal(takeaway.bookmarkCount, 1);
@@ -1023,14 +1035,59 @@ Kurz.`;
 
 		const calls: Array<{ sql: string; params: unknown[] }> = [];
 		const store = new PostgresActivityStore({ async query(sql: string, params: unknown[] = []) { calls.push({ sql, params }); return { rows: [] }; } }, () => 'event1');
-		await store.upsertReplaySession({ roomId: 'room1', deckId: 'deck1', slides: parseDeck('# Persisted'), stats: replay.stats, ended: true, protected: true, ts: 123 });
+		const pinVerifier = createPinVerifier('room1', '1234', 'secret');
+		await store.upsertReplaySession({ roomId: 'room1', deckId: 'deck1', slides: parseDeck('# Persisted'), stats: replay.stats, ended: true, protected: true, pinVerifier, ts: 123 });
 		await store.recordReplayEvent({ roomId: 'room1', deckId: 'deck1', event: { type: 'end', slide: 0, ts: 124 } });
+		assert.equal(await store.verifyReplayPin('room1', pinVerifier), false);
 		await store.recordFollow({ email: 'test@example.com', deckId: 'deck1', roomId: 'room1', createdAt: 125 });
-		assert.ok(calls.some((c) => c.sql.includes('replay_sessions')));
+		const replayUpsert = calls.find((call) => call.sql.includes('ON CONFLICT (room_id)'));
+		assert.ok(replayUpsert);
+		assert.match(replayUpsert.sql, /WHERE EXCLUDED\.updated_at >= replay_sessions\.updated_at/);
+		assert.match(replayUpsert.sql, /NOT replay_sessions\.ended OR EXCLUDED\.ended/);
 		assert.ok(calls.some((c) => c.sql.includes('protected')));
+		assert.ok(calls.some((c) => c.sql.includes('pin_verifier')));
 		assert.ok(calls.some((c) => c.sql.includes('INSERT INTO events')));
 		assert.ok(calls.some((c) => c.sql.includes('INSERT INTO follows')));
 		ok('PostgresActivityStore persistiert Replay-Session, Events und Follows');
+		ok('Replay-Upserts ignorieren ältere Writes und lassen ended nicht auf false zurückfallen');
+
+		let legacyQueries = 0;
+		const legacyStore = new PostgresActivityStore({
+			async query(sql: string) {
+				legacyQueries += 1;
+				assert.match(sql, /pin_verifier/);
+				return { rows: [{ room_id: 'legacy-pin', slides: [], stats: replay.stats, ended: true, protected: true, pin_verifier: null }] };
+			}
+		});
+		assert.equal(await legacyStore.getReplay('legacy-pin'), null);
+		assert.equal(legacyQueries, 1, 'Legacy-PIN-Replay lädt keine Events und wird wie unbekannt behandelt');
+		ok('Geschützte Replay-Zeilen ohne PIN-Verifier werden nicht als entsperrbare Replays angeboten');
+
+		const timingWarnings: string[] = [];
+		assert.deepEqual(resolveEndedRoomTiming('5000', (message) => timingWarnings.push(message)), { ttlMs: 5_000, sweepIntervalMs: 10_000 });
+		assert.deepEqual(resolveEndedRoomTiming('4999', (message) => timingWarnings.push(message)), { ttlMs: 30 * 60 * 1000, sweepIntervalMs: 5 * 60 * 1000 });
+		assert.deepEqual(resolveEndedRoomTiming('kein-wert', (message) => timingWarnings.push(message)), { ttlMs: 30 * 60 * 1000, sweepIntervalMs: 5 * 60 * 1000 });
+		assert.equal(timingWarnings.length, 2);
+		assert.ok(timingWarnings.every((message) => message.includes('EB_ENDED_ROOM_TTL_MS')));
+		ok('Ended-Room-TTL und Sweep-Intervall haben Floors und loggen Fehlkonfigurationen');
+
+		removeRoom(id);
+		const swept = createRoom(parseDeck('# Sweep'));
+		endRoom(swept.id, swept.presenterToken);
+		const sweptAt = getRoom(swept.id)?.endedAt;
+		assert.equal(typeof sweptAt, 'number');
+		sweepRooms(sweptAt! + ENDED_ROOM_TTL_MS);
+		assert.equal(getRoom(swept.id), undefined);
+		const idle = createRoom(parseDeck('# Idle'));
+		const evicted = createRoom(parseDeck('# Evict'));
+		endRoom(evicted.id, evicted.presenterToken);
+		assert.equal(evictRoomForCapacity(), evicted.id);
+		assert.equal(getRoom(evicted.id), undefined);
+		assert.ok(getRoom(idle.id), 'Capacity-Eviction entfernt beendete Rooms vor aktiven idle Rooms');
+		assert.equal(evictRoomForCapacity(), idle.id);
+		assert.equal(getRoom(idle.id), undefined);
+		assert.equal(removeRoom(idle.id), false);
+		ok('Ended-TTL-Sweep und Capacity-Eviction entfernen beendete Rooms deterministisch');
 	}
 
 	console.log(`\nALL PASS — ${passed} assertions.`);
