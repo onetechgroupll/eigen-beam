@@ -18,7 +18,8 @@ type McpToolsList = { tools?: McpTool[] };
 type McpStructured = { structuredContent?: Record<string, unknown> };
 
 const WRAPPER = env.EB_MCP_WRAPPER ?? './scripts/eigenbeam-mcp.sh';
-const HTTP_BASE = (env.EB_MCP_HTTP_BASE ?? env.EB_SMOKE_BASE ?? 'http://127.0.0.1:4176').replace(/\/$/, '');
+const LEGACY_HTTP_BASE = (env.EB_MCP_HTTP_BASE ?? env.EB_SMOKE_BASE ?? 'http://localhost:4176').replace(/\/$/, '');
+const MCP_URL = (env.EB_MCP_URL ?? `${LEGACY_HTTP_BASE}/mcp`).replace(/\/$/, '');
 const MUTATE = env.EB_MCP_SMOKE_MUTATE === '1';
 const EXPECTED_TOOLS = ['create_deck', 'get_deck', 'update_deck', 'create_room', 'upload_asset'];
 const REQUEST_TIMEOUT_MS = Number(env.EB_MCP_SMOKE_TIMEOUT_MS ?? 45_000);
@@ -155,19 +156,19 @@ async function main() {
 }
 
 async function verifyProtectedResourceDiscovery() {
-	const metaRes = await fetch(`${HTTP_BASE}/.well-known/oauth-protected-resource/mcp`, { headers: { accept: 'application/json' } });
+	const metaRes = await fetch(new URL('/.well-known/oauth-protected-resource/mcp', MCP_URL), { headers: { accept: 'application/json' } });
 	assert.equal(metaRes.status, 200, 'protected resource metadata endpoint returns 200');
 	assert.equal(metaRes.headers.get('cache-control'), 'no-store');
 	const raw = await metaRes.text();
 	const metadata = JSON.parse(raw) as { resource?: unknown; bearer_methods_supported?: unknown; scopes_supported?: unknown };
-	assert.equal(metadata.resource, `${HTTP_BASE}/mcp`);
+	assert.equal(metadata.resource, MCP_URL);
 	assert.deepEqual(metadata.bearer_methods_supported, ['header']);
 	assert.ok(Array.isArray(metadata.scopes_supported) && metadata.scopes_supported.includes('deck:read'));
 	assert.equal(raw.includes('postgres://'), false);
 	assert.equal(raw.includes('Bearer '), false);
 	ok('OAuth protected-resource metadata ist erreichbar und secret-safe');
 
-	const unauthorized = await fetch(`${HTTP_BASE}/mcp`, {
+	const unauthorized = await fetch(MCP_URL, {
 		method: 'POST',
 		headers: { accept: 'application/json, text/event-stream', 'content-type': 'application/json' },
 		body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'unauth-smoke', version: '0' } } })

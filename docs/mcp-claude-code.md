@@ -4,7 +4,7 @@ The repository contains a project-scoped MCP setup. Claude Code reads `.mcp.json
 
 ## Setup
 
-1. Pick the instance. By default the wrapper talks to a local dev server at `http://localhost:5173/mcp`. To use another instance, put its MCP URL into an ignored file:
+1. Pick the instance. By default the wrapper and MCP smoke talk to `http://localhost:4176/mcp`. `EB_MCP_URL` overrides that default. To persist another instance without putting it in project config, write its MCP URL to the ignored file:
 
    ```bash
    mkdir -p .data/secrets
@@ -17,7 +17,7 @@ The repository contains a project-scoped MCP setup. Claude Code reads `.mcp.json
    printf '%s' "<token>" > .data/secrets/eigenbeam-mcp-token.txt
    ```
 
-   For local development, start the dev server with a token, for example `EB_MCP_TOKEN=dev-token bun run dev`.
+   For local development, start the dev server on the shared default endpoint, for example `EB_MCP_TOKEN=dev-token bun run dev -- --port 4176`.
 
 3. Open the project in Claude Code (restart it if it was already open) and approve the project MCP server `eigenbeam`.
 

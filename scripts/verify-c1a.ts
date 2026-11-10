@@ -18,13 +18,15 @@ import { DEFAULT_CLAUDE_MODEL, claudeModel, parseDeckJson, requestDeckJson } fro
 import { sniffImage, S3AssetStore } from '../src/lib/server/assets.ts';
 import { claimPresenterToken, createRoom, endRoom, ENDED_ROOM_TTL_MS, evictRoomForCapacity, getReplay, getRoom, recordViewerEvent, removeRoom, resolveEndedRoomTiming, setSlide, sweepRooms } from '../src/lib/server/rooms.ts';
 import { createUnsubToken, escapeHtml, recordFollow, recordFollowDetailed, sanitizeFollowTarget, verifyUnsubToken } from '../src/lib/server/followers.ts';
-import { OutboxEmailProvider, getMailerForEnv, readOutbox } from '../src/lib/server/mailer.ts';
+import { devLoginLine, OutboxEmailProvider, getMailerForEnv, readOutbox } from '../src/lib/server/mailer.ts';
 import { PostgresActivityStore } from '../src/lib/server/activity-store.ts';
 import { canonicalPublicOrigin } from '../src/lib/server/origin.ts';
 import { RATE_LIMITS } from '../src/lib/server/rate-limit.ts';
 import { securityHeaders } from '../src/lib/server/security-headers.ts';
 import { requireAiUserSession } from '../src/lib/server/ai-auth.ts';
-import { livenessPayload, readinessPayload } from '../src/lib/server/health.ts';
+import { EXPECTED_SCHEMA_MIGRATION, livenessPayload, readinessPayload } from '../src/lib/server/health.ts';
+import { collectEnvironmentIssues, isProductionRuntime as isProductionRuntimeEnv } from './env-validation.mjs';
+import { MIGRATION_DEFAULTS, resolveMigrationTiming, runMigrations } from './migrate-core.mjs';
 import { applySentimentSignal, conversionCta, liveSentimentLabel, pacingHint, reopenInsight, replaySentiment, sentimentEventWeight } from '../src/lib/polish.ts';
 import { fieldTestChecklist, liveStatsDashboard } from '../src/lib/stats-dashboard.ts';
 import { presenterFeedItem } from '../src/lib/presenter-feed.ts';
@@ -185,6 +187,14 @@ async function main() {
 		assert.equal(slides[1].compare?.rightTitle, 'Neu');
 		assert.equal(slides[2].timeline?.length, 2);
 		ok('Blocktypen number/compare/timeline + Reveal werden geparst');
+	}
+
+	// 8a) Unicode-Zeilentrenner bleiben innerhalb von Direktiven-Werten erhalten
+	{
+		for (const eyebrow of ['a\u2028b', 'a\u2029b']) {
+			assert.equal(parseDeck(`eyebrow: ${eyebrow}\n# Unicode`)[0].eyebrow, eyebrow);
+		}
+		ok('Direktiven behalten U+2028/U+2029 im Wert');
 	}
 
 	// 8b) Timeline-Labels dürfen Doppelpunkte und Bindestriche enthalten
@@ -367,6 +377,12 @@ async function main() {
 		assert.ok(clarifiedSlides.every((slide) => slide.headline.length <= 68));
 		assert.ok(clarifiedSlides.every((slide) => !slide.body || slide.body.length <= 110));
 		assert.equal(clarifiedSlides[0].speakerNotes, 'Presenter-Kontext 1');
+		const clarifiedTextImage = parseDeck(localClarify(
+			'Inline image',
+			'type: text\n# Inline image\n![Inline](https://cdn.example.test/inline.png)'
+		).source)[0];
+		assert.equal(clarifiedTextImage.kind ?? 'text', 'text');
+		assert.equal(clarifiedTextImage.image, 'https://cdn.example.test/inline.png');
 		assert.equal(sniffImage(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0])), 'image/png');
 		const imageSlide = parseDeck('type: image\n# Lesbarer Overlay\n![Cover](https://cdn.example.test/cover.png)')[0];
 		const denseSlide = parseDeck(`# ${'Sehr lange Headline '.repeat(8)}\n${'Sehr langer Body für kleine Telefone. '.repeat(16)}`)[0];
@@ -567,23 +583,150 @@ Kurz.`;
 				EB_RESEND_API_KEY: 'resend-secret',
 				EB_MCP_TOKENS: 'token|deck:read'
 			},
-			pingDatabase: async () => true
+			readDatabaseSchema: async () => EXPECTED_SCHEMA_MIGRATION
 		});
 		assert.equal(ready.ok, true);
 		assert.equal(ready.status, 'ready');
-		assert.equal(ready.checks.database.ok, true);
+		assert.equal(ready.checks.databaseSchema.status, 'ready');
+		for (const check of Object.values(ready.checks)) {
+			assert.deepEqual(Object.keys(check).sort(), ['actual', 'expected', 'fix', 'status']);
+		}
 		assert.equal(JSON.stringify(ready).includes('postgres://redacted'), false);
 		assert.equal(JSON.stringify(ready).includes('resend-secret'), false);
 
 		const notReady = await readinessPayload({
 			env: { NODE_ENV: 'production', EB_DECK_STORE: 'file', EB_ACTIVITY_STORE: 'off' },
-			pingDatabase: async () => true
+			readDatabaseSchema: async () => EXPECTED_SCHEMA_MIGRATION
 		});
 		assert.equal(notReady.ok, false);
 		assert.equal(notReady.status, 'not_ready');
-		assert.equal(notReady.checks.deckStore.ok, false);
-		assert.equal(notReady.checks.activityStore.ok, false);
-		ok('Health/Readiness-Payloads sind secret-safe und fail-closed für Production-Konfig');
+		assert.equal(notReady.checks.deckStore.status, 'not_ready');
+		assert.equal(notReady.checks.activityStore.status, 'not_ready');
+
+		const oauthOnly = await readinessPayload({
+			env: {
+				NODE_ENV: 'production',
+				ORIGIN: 'https://eigen.example',
+				EB_MAGIC_LINK_SECRET: 'secret',
+				EB_DECK_STORE: 'postgres',
+				EB_ACTIVITY_STORE: 'postgres',
+				DATABASE_URL: 'postgres://redacted',
+				EB_ASSET_STORE: 's3',
+				EB_BUCKET_NAME: 'bucket',
+				EB_MAIL_PROVIDER: 'postmark',
+				EB_POSTMARK_TOKEN: 'postmark-secret',
+				EB_OAUTH_CLIENTS: 'client:secret|deck:read',
+				EB_OAUTH_TOKEN_SECRET: 'oauth-secret'
+			},
+			readDatabaseSchema: async () => EXPECTED_SCHEMA_MIGRATION
+		});
+		assert.equal(oauthOnly.ok, true);
+		assert.equal(oauthOnly.checks.mcpAuth.status, 'ready');
+		assert.equal(oauthOnly.checks.mcpAuth.actual, 'OAuth clients configured');
+		ok('Health/Readiness-Payloads haben stabiles Shape, Schema-Pin und OAuth-only-Readiness');
+
+		const environmentIssues = collectEnvironmentIssues({
+			NODE_ENV: 'production',
+			ORIGIN: 'http://not-production.example',
+			EB_DECK_STORE: 'file',
+			EB_ACTIVITY_STORE: 'off',
+			EB_ASSET_STORE: 'local',
+			EB_MAIL_PROVIDER: 'outbox',
+			EB_MIGRATE_ON_BOOT: 'sometimes',
+			EB_OAUTH_AUTH_CODE: 'yes',
+			EB_QUOTA_DECKS_PER_USER: '0',
+			EB_DEMO_DECK_TTL_DAYS: '-1',
+			EB_DEFAULT_LOCALE: 'english'
+		}).map((issue) => issue.name);
+		for (const expected of ['DATABASE_URL', 'EB_MAGIC_LINK_SECRET', 'EB_MIGRATE_ON_BOOT', 'EB_OAUTH_AUTH_CODE', 'EB_QUOTA_DECKS_PER_USER', 'EB_DEMO_DECK_TTL_DAYS', 'EB_DEFAULT_LOCALE']) {
+			assert.equal(environmentIssues.includes(expected), true, `${expected} muss gesammelt gemeldet werden`);
+		}
+		assert.ok(environmentIssues.length > 7, 'Collector meldet alle Fehler statt nur den ersten');
+		ok('Boot-Env-Collector meldet alle fehlenden und ungültigen Namen in einem Lauf');
+
+		// Production ohne gesetzte Stores sammelt deren Abhängigkeiten im selben Lauf.
+		const forcedDeps = collectEnvironmentIssues({ NODE_ENV: 'production' }).map((issue) => issue.name);
+		for (const expected of ['EB_ASSET_STORE', 'EB_BUCKET_NAME', 'EB_MAIL_PROVIDER', 'EB_RESEND_API_KEY', 'EB_DECK_STORE', 'DATABASE_URL', 'EB_MAGIC_LINK_SECRET']) {
+			assert.equal(forcedDeps.includes(expected), true, `${expected} muss bei ungegesetzten Production-Defaults im selben Lauf gemeldet werden`);
+		}
+		// ORIGIN ist außerhalb von NODE_ENV=development Pflicht (Minimal-Modus).
+		assert.equal(collectEnvironmentIssues({}).map((i) => i.name).includes('ORIGIN'), true, 'ORIGIN fehlt im Minimal-Modus');
+		assert.equal(collectEnvironmentIssues({ NODE_ENV: 'development' }).map((i) => i.name).includes('ORIGIN'), false, 'vite dev bleibt ORIGIN-frei');
+		assert.equal(collectEnvironmentIssues({ ORIGIN: 'http://localhost:3000' }).map((i) => i.name).includes('ORIGIN'), false, 'lokale http-ORIGIN ist im Minimal-Modus gültig');
+		assert.equal(isProductionRuntimeEnv({ NODE_ENV: 'Production' }), true, 'Production-Marker case-insensitiv');
+		ok('Env-Collector deckt Production-Forced-Defaults, ORIGIN-Pflicht und Case-Normalisierung ab');
+
+		// Schema VOR dem Image-Build ist das dokumentierte additive Rollback-Fenster.
+		const ahead = await readinessPayload({
+			env: {
+				NODE_ENV: 'production',
+				ORIGIN: 'https://eigen.example',
+				EB_MAGIC_LINK_SECRET: 'secret',
+				EB_DECK_STORE: 'postgres',
+				EB_ACTIVITY_STORE: 'postgres',
+				DATABASE_URL: 'postgres://redacted',
+				EB_ASSET_STORE: 's3',
+				EB_BUCKET_NAME: 'bucket',
+				EB_MAIL_PROVIDER: 'resend',
+				EB_RESEND_API_KEY: 'resend-secret',
+				EB_MCP_TOKENS: 'token|deck:read'
+			},
+			readDatabaseSchema: async () => '999_future_additive'
+		});
+		assert.equal(ahead.checks.databaseSchema.status, 'ready', 'additiv neueres Schema bleibt ready');
+		assert.equal(ahead.checks.databaseSchema.actual, '999_future_additive');
+		ok('Readiness akzeptiert additiv neueres Schema (Rollback-Fenster)');
+
+		assert.deepEqual(resolveMigrationTiming({
+			EB_MIGRATE_LOCK_TIMEOUT_MS: '250',
+			EB_MIGRATE_STATEMENT_TIMEOUT_MS: '2000',
+			EB_MIGRATE_RETRY_DELAY_MS: '0'
+		}), { lockTimeoutMs: 250, statementTimeoutMs: 2000, retryDelayMs: 0, lockAttempts: 3 });
+		assert.deepEqual(resolveMigrationTiming({
+			EB_MIGRATE_LOCK_TIMEOUT_MS: 'invalid',
+			EB_MIGRATE_STATEMENT_TIMEOUT_MS: '999',
+			EB_MIGRATE_RETRY_DELAY_MS: '-1'
+		}), MIGRATION_DEFAULTS);
+		ok('Migration-Timing-Parser akzeptiert Grenzen und fällt bei ungültigen Werten sicher zurück');
+
+		const migrationQueries: Array<{ sql: string; params: unknown[] }> = [];
+		let lockAttempts = 0;
+		let migrationClientReleased = false;
+		const migrationClient = {
+			async query(sql: string, params: unknown[] = []) {
+				migrationQueries.push({ sql, params });
+				if (sql.includes('pg_advisory_lock')) {
+					lockAttempts++;
+					if (lockAttempts < 3) throw Object.assign(new Error('lock timeout'), { code: '55P03' });
+				}
+				if (sql.startsWith('SELECT 1 FROM schema_migrations')) {
+					return { rows: [], rowCount: params[0] === '001_foundation.sql' ? 0 : 1 };
+				}
+				return { rows: [], rowCount: 0 };
+			},
+			release() { migrationClientReleased = true; }
+		};
+		const migrationPool = {
+			async connect() { return migrationClient; },
+			async end() { throw new Error('injected pool must not be ended'); }
+		};
+		const originalConsoleLog = console.log;
+		console.log = () => undefined;
+		try {
+			await runMigrations({
+				connectionString: 'postgres://redacted',
+				pool: migrationPool as never,
+				timing: { lockTimeoutMs: 100, statementTimeoutMs: 1_000, retryDelayMs: 0, lockAttempts: 3 }
+			});
+		} finally {
+			console.log = originalConsoleLog;
+		}
+		assert.equal(lockAttempts, 3);
+		assert.equal(migrationClientReleased, true);
+		assert.equal(migrationQueries.filter((query) => query.sql === 'BEGIN').length, 1);
+		assert.equal(migrationQueries.filter((query) => query.sql === 'COMMIT').length, 1);
+		assert.equal(migrationQueries.some((query) => query.sql.includes('pg_advisory_unlock')), true);
+		ok('Migrationsrunner nutzt einen Client, retryt den Session-Lock und committed pro Datei');
 
 		const previousNodeEnv = process.env.NODE_ENV;
 		process.env.NODE_ENV = 'production';
@@ -1085,8 +1228,17 @@ Kurz.`;
 		assert.equal(verifyUnsubToken(unsubToken.replace(/.$/, 'x'), 'secret'), null);
 		const outboxDir = '.data/verify-outbox';
 		await rm(outboxDir, { recursive: true, force: true });
-		await new OutboxEmailProvider(outboxDir, () => 'mail1').send({ to: 'test@example.com', subject: 'Verify', text: 'hello' });
-		assert.equal((await readOutbox(outboxDir))[0]?.subject, 'Verify');
+		const loginMessage = {
+			to: 'test@example.com',
+			subject: 'Login',
+			text: 'Login:\n\nhttp://localhost:3000/auth/verify?token=login-code'
+		};
+		const mailLogs: string[] = [];
+		await new OutboxEmailProvider(outboxDir, () => 'mail1', (line) => mailLogs.push(line)).send(loginMessage);
+		assert.equal((await readOutbox(outboxDir))[0]?.subject, 'Login');
+		assert.match(mailLogs[0] ?? '', /^=== LOGIN LINK === .* === LOGIN CODE === login-code ===$/);
+		assert.equal(devLoginLine(loginMessage, { NODE_ENV: 'production' }), null);
+		assert.equal(devLoginLine(loginMessage, { RAILWAY_ENVIRONMENT: 'production' }), null);
 		await rm(followPath, { force: true });
 		await rm(outboxDir, { recursive: true, force: true });
 		ok('Follow speichert/dedupt, Unsubscribe-Token und Mail-Outbox funktionieren');
