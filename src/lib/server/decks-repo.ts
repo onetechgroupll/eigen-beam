@@ -8,12 +8,12 @@
 //     EB_DECK_STORE=memory   → flüchtig (Tests, CI, Wegwerf)
 //     EB_DECK_STORE=file     → JSON-Dateien unter EB_DATA_DIR (Default, persistiert lokal)
 //     EB_DECK_STORE=postgres → ANSCHLUSSSTELLE (noch nicht implementiert, s. unten)
-//   Default ohne ENV: file (überlebt lokale Restarts → Demo wird ein nutzbares Tool),
-//   mit hartem Fallback auf Memory, falls das Verzeichnis nicht beschreibbar ist.
+//   Default ohne ENV: file (überlebt lokale Restarts → Demo wird ein nutzbares Tool).
+//   Ein nicht beschreibbares Verzeichnis ist ein Boot-Fehler, kein Memory-Fallback.
 //
 // Type-only $lib-Import → diese Datei ist zur Laufzeit alias-frei und im bun-Skript ladbar.
 import type { Deck, DeckVisibility, Slide } from '$lib/decks';
-import { mkdirSync } from 'node:fs';
+import { accessSync, constants, mkdirSync } from 'node:fs';
 import { mkdir, readFile, writeFile, rename, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { env } from 'node:process';
@@ -458,14 +458,14 @@ export function getDeckRepo(): DeckRepository {
 		_repo = new PostgresDeckRepository(new Pool({ connectionString: env.DATABASE_URL }));
 		return _repo;
 	}
-	// Default: file, mit hartem Memory-Fallback bei nicht beschreibbarem Verzeichnis.
+	// Default: file. Persistence failures must be visible instead of silently losing data.
 	const dir = env.EB_DATA_DIR ?? '.data/decks';
 	try {
 		mkdirSync(dir, { recursive: true });
+		accessSync(dir, constants.W_OK);
 		_repo = new FileDeckRepository(dir);
 	} catch (e) {
-		console.warn(`[decks] File-Store unter "${dir}" nicht nutzbar → Memory-Fallback.`, e);
-		_repo = new MemoryDeckRepository();
+		throw new Error('EB_DATA_DIR is not writable.', { cause: e });
 	}
 	return _repo;
 }

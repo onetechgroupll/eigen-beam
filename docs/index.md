@@ -33,7 +33,8 @@ Start with the [README](../README.md) for what eigen.beam is and a two-minute qu
 
 1. [`deployment.md`](deployment.md): Docker, Railway and other hosts; minimal vs. production mode; full env reference.
 2. [`operations.md`](operations.md): `/healthz`, `/readyz`, smokes and the watchdog.
-3. [`security.md`](security.md) and [`privacy.md`](privacy.md): what a public instance exposes and stores.
+3. [`upgrading.md`](upgrading.md): backups, migrations, rollback windows and breaking releases.
+4. [`security.md`](security.md) and [`privacy.md`](privacy.md): what a public instance exposes and stores.
 
 ### I want to understand the design
 

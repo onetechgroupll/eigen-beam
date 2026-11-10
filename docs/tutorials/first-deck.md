@@ -79,7 +79,7 @@ Now close the sheet and tap the left half of the viewer slide twice to go back. 
 
 Open `http://localhost:5173/replay/<roomId>` (same ID as in the remote's URL). The **Session Summary** names slide 4 as the one that landed, with one reaction, one question and one bookmark. **Details öffnen** adds the slide heatmap, a deck v2 draft, the session coach and a follow-up mail. The question counts, but its text is not shown: replays are shareable, questions are not.
 
-In local dev, replays live in memory and vanish when you stop the server. A production instance stores them in Postgres ([deployment](../deployment.md#production-env)).
+In local dev, replays live in memory and vanish when you stop the server. A production instance stores them in Postgres ([deployment](../deployment.md#environment)).
 
 ## What you built
 

@@ -44,7 +44,8 @@ Check mode labels in the JSON response; do not print secrets. Common causes:
 - `DATABASE_URL` missing/unreachable;
 - S3 bucket env incomplete;
 - mail provider env incomplete;
-- MCP auth token env missing.
+- MCP auth missing (`EB_MCP_TOKEN`/`EB_MCP_TOKENS`, or OAuth clients plus the OAuth token secret);
+- `schema_migrations` is behind the version named by the running image.
 
 See [`deployment.md`](deployment.md) and [`operations.md`](operations.md).
 

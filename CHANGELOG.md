@@ -1,8 +1,20 @@
 # Changelog
 
-This project does not currently publish formal versioned releases. This changelog tracks major repo/product milestones at a human-readable level.
+Semver tags publish a GHCR image and a GitHub release. Each versioned section includes upgrade notes for operators.
 
-## Unreleased / current main
+## [Unreleased]
+
+### Upgrade notes
+
+- The container now migrates Postgres on boot by default. Set `EB_MIGRATE_ON_BOOT=false` only when a separate release step runs the image's `migrate` command.
+- Production boot validates all required environment variables together and no longer falls back to volatile deck storage when a configured data directory is not writable.
+
+### Changed
+
+- Added the semver-tag release workflow for multi-platform public GHCR images and GitHub Releases.
+- Added advisory-locked, transactional migrations with bounded retries and a Node-compatible runtime runner.
+- Added schema-aware readiness checks with OAuth-only MCP support and secret-safe per-check remediation.
+- Added the Docker/Postgres release smoke and operator upgrade/rollback documentation.
 
 - Self-hosters get a Compose stack with Postgres, MinIO and persistent data, plus a highlighted login link and code in Outbox logs outside production for the first login.
 - MCP Bearer setup now uses `EB_MCP_URL` and `http://localhost:4176/mcp` consistently across the wrapper, smoke and setup documentation.
