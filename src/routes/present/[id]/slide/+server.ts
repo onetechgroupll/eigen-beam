@@ -14,6 +14,11 @@ export const POST: RequestHandler = async ({ params, request, cookies }) => {
 export const DELETE: RequestHandler = async ({ params, cookies }) => {
 	const token = cookies.get(`eb_pt_${params.id}`) ?? '';
 	const r = endRoom(params.id, token);
-	if (!r.ok) return json({ error: true }, { status: r.status ?? 400 });
-	return json({ ok: true });
+	if (!r.ok) {
+		return json(
+			{ error: true, code: r.code, message: r.code === 'already_ended' ? 'Session bereits beendet.' : undefined, endedAt: r.endedAt, stats: r.stats, questions: r.questions },
+			{ status: r.status ?? 400 }
+		);
+	}
+	return json({ ok: true, endedAt: r.endedAt, stats: r.stats, questions: r.questions });
 };

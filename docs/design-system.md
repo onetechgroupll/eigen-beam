@@ -28,6 +28,13 @@ The lime accent is used sparingly: filled progress segments and the LIVE dot. It
 - A small `● LIVE` at the top right.
 - Footer: `← back` (muted) and `n / N`.
 
+## Sheet & dialog
+
+- Sheets stay attached to the edge of the phone, use the normal surface and hairline tokens, and keep every action at least 44px tall. They must not shrink the slide or become a permanent second column.
+- A destructive session action uses a modal confirmation sheet. It states the audience-wide effect in plain language, keeps cancel available, and does not show a local success state before the server confirms the transition.
+- When captured questions have not been exported, the session-end dialog offers **Export and end** and **End without export** as separate choices. A failed or offline request leaves the room live and offers retry.
+- End screens are their own calm surface, not viewer chrome over the final slide. The replay is the single lime primary action; creating a deck stays a quiet text link.
+
 ## States
 
 | State | What the viewer sees |
@@ -35,7 +42,7 @@ The lime accent is used sparingly: filled progress segments and the LIVE dot. It
 | Join / pre-start | Large `eigen.beam` wordmark and a calm "starting soon" |
 | Live slide | The default layout above |
 | Behind | After browsing back: `● LIVE — you are behind` plus a "jump to current slide" button (at least 44px) |
-| Ended | "Presentation ended", plus a download CTA if enabled |
+| Ended | "Presentation ended", with replay as the only lime primary action and deck creation as a quiet link |
 | Room gone (410) | A friendly screen instead of a blank error |
 | Onboarding hint | Shown once per session: swipe back to re-read, you will snap back to the live slide |
 

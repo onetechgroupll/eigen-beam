@@ -11,11 +11,21 @@
 	let current = $state(initial(() => data.current));
 	let qr = $state('');
 	let viewerUrl = $state('');
-	let stats = $state(initial(() => data.stats));
+	let stats = $state(initial(() => ({ ...data.stats, questions: Math.max(data.stats.questions, data.questions.length) })));
 	let feed = $state<PresenterFeedItem[]>([]);
+	let questions = $state(initial(() => data.questions));
+	let presenterEvents: EventSource | null = null;
 	let sentimentPoints = $state<SentimentPoint[]>(initial(() => replaySentiment([], data.slides.length)));
 	let showJoin = $state(false);
 	let showCoach = $state(false);
+	let showSession = $state(false);
+	let showEndDialog = $state(false);
+	let ending = $state(false);
+	let endError = $state('');
+	let ended = $state(initial(() => data.ended));
+	let endedAt = $state<number | null>(initial(() => data.endedAt));
+	let alreadyEnded = $state(false);
+	let questionsExported = $state(false);
 	const total = initial(() => data.slides.length);
 	let slide = $derived(data.slides[current]);
 	let pacing = $derived(pacingHint(slide));
@@ -23,8 +33,11 @@
 	let reopen = $derived(reopenInsight(stats));
 	let dashboard = $derived(liveStatsDashboard(stats));
 	let checklist = $derived(fieldTestChecklist(stats, viewerUrl));
+	let questionCount = $derived(Math.max(stats.questions, questions.length));
+	let durationMinutes = $derived(Math.max(0, Math.round(((endedAt ?? Date.now()) - stats.startedAt) / 60_000)));
 
 	async function go(n: number) {
+		if (ended) return;
 		const res = await fetch(`/present/${data.id}/slide`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ slide: n }) });
 		if (res.ok) { const j = await res.json(); current = j.current; }
 	}
@@ -38,25 +51,102 @@
 	function signal(slideIndex: number, type: 'reaction' | 'question' | 'bookmark') {
 		sentimentPoints = applySentimentSignal(sentimentPoints, slideIndex, type);
 	}
+	function requestEnd() {
+		endError = '';
+		showSession = false;
+		showEndDialog = true;
+	}
+	function closePresenterStream() {
+		presenterEvents?.close();
+		presenterEvents = null;
+	}
+	function downloadQuestions() {
+		questionsExported = true;
+		window.location.assign(`/present/${data.id}/questions`);
+	}
+	async function endSession(exportAfterEnd = false) {
+		if (ending) return;
+		ending = true;
+		endError = '';
+		try {
+			const res = await fetch(`/present/${data.id}/slide`, { method: 'DELETE' });
+			const result = await res.json().catch(() => ({})) as { endedAt?: unknown; stats?: unknown; questions?: unknown };
+			const serverQuestions = readQuestions(result.questions);
+			const serverStats = readStats(result.stats);
+			if (serverQuestions) questions = serverQuestions;
+			if (serverStats) stats = serverStats;
+			if (serverQuestions) stats = { ...stats, questions: serverQuestions.length };
+			if (res.ok || res.status === 410) {
+				closePresenterStream();
+				alreadyEnded = res.status === 410;
+				endedAt = typeof result.endedAt === 'number' && Number.isFinite(result.endedAt) ? result.endedAt : (endedAt ?? Date.now());
+				ended = true;
+				showEndDialog = false;
+				if (exportAfterEnd) downloadQuestions();
+				return;
+			}
+			endError = 'Session konnte nicht beendet werden. Bitte erneut versuchen.';
+		} catch {
+			endError = 'Keine Verbindung. Die Session läuft weiter. Bitte erneut versuchen.';
+		} finally {
+			ending = false;
+		}
+	}
+	function readQuestions(value: unknown): Array<{ text: string; slide: number; ts: number }> | null {
+		if (!Array.isArray(value)) return null;
+		return value
+			.filter((question): question is { text: string; slide: number; ts: number } => Boolean(question) && typeof question.text === 'string' && Number.isFinite(question.slide) && Number.isFinite(question.ts))
+			.map((question) => ({ text: question.text, slide: Math.floor(question.slide), ts: question.ts }));
+	}
+	function readStats(value: unknown): typeof stats | null {
+		if (!value || typeof value !== 'object') return null;
+		const candidate = value as typeof stats;
+		const fields = [candidate.joins, candidate.currentViewers, candidate.peakConcurrent, candidate.reopens, candidate.reactions, candidate.questions, candidate.bookmarks, candidate.startedAt];
+		return fields.every((field) => typeof field === 'number' && Number.isFinite(field)) ? candidate : null;
+	}
 
 	onMount(() => {
 		viewerUrl = `${location.origin}/v/${data.id}`;
+		if (ended) return;
 		QRCode.toDataURL(viewerUrl, { margin: 1, width: 320 }).then((d) => (qr = d));
 		window.addEventListener('keydown', key);
-		const es = new EventSource(`/present/${data.id}/events`);
-		es.addEventListener('stats', (e) => { const j = JSON.parse((e as MessageEvent).data); stats = j.stats; });
-		es.addEventListener('reaction', (e) => { const j = JSON.parse((e as MessageEvent).data); signal(j.slide, 'reaction'); push(presenterFeedItem({ type: 'reaction', reaction: j.reaction, slide: j.slide, ts: j.ts })); });
-		es.addEventListener('question', (e) => { const j = JSON.parse((e as MessageEvent).data); signal(j.slide, 'question'); push(presenterFeedItem({ type: 'question', text: j.text, slide: j.slide, ts: j.ts })); });
-		es.addEventListener('bookmark', (e) => { const j = JSON.parse((e as MessageEvent).data); signal(j.slide, 'bookmark'); push(presenterFeedItem({ type: 'bookmark', slide: j.slide, ts: j.ts })); });
-		return () => { window.removeEventListener('keydown', key); es.close(); };
+		presenterEvents = new EventSource(`/present/${data.id}/events`);
+		presenterEvents.addEventListener('stats', (e) => { const j = JSON.parse((e as MessageEvent).data); stats = { ...j.stats, questions: Math.max(j.stats.questions, questions.length) }; });
+		presenterEvents.addEventListener('reaction', (e) => { const j = JSON.parse((e as MessageEvent).data); signal(j.slide, 'reaction'); push(presenterFeedItem({ type: 'reaction', reaction: j.reaction, slide: j.slide, ts: j.ts })); });
+		presenterEvents.addEventListener('question', (e) => { const j = JSON.parse((e as MessageEvent).data); questions = [...questions, { text: j.text, slide: j.slide, ts: j.ts }]; stats = { ...stats, questions: questions.length }; signal(j.slide, 'question'); push(presenterFeedItem({ type: 'question', text: j.text, slide: j.slide, ts: j.ts })); });
+		presenterEvents.addEventListener('bookmark', (e) => { const j = JSON.parse((e as MessageEvent).data); signal(j.slide, 'bookmark'); push(presenterFeedItem({ type: 'bookmark', slide: j.slide, ts: j.ts })); });
+		presenterEvents.addEventListener('ended', (e) => { const j = JSON.parse((e as MessageEvent).data); endedAt = j.ts; ended = true; showEndDialog = false; showSession = false; closePresenterStream(); });
+		return () => { window.removeEventListener('keydown', key); closePresenterStream(); };
 	});
 </script>
 
+{#if ended}
+	<main class="end-state">
+		<section class="end-card" aria-label="Session beendet">
+			<span class="mono kicker">SESSION BEENDET</span>
+			<h1>{alreadyEnded ? 'Diese Session war bereits beendet.' : 'Session beendet.'}</h1>
+			<p>Alle Viewer sehen jetzt den End-Screen. Der Replay-Link bleibt bereit.</p>
+			<div class="end-stats">
+				<article><strong>{durationMinutes}</strong><span>Minuten</span></article>
+				<article><strong>{stats.peakConcurrent}</strong><span>Viewer-Peak</span></article>
+				<article><strong>{questionCount}</strong><span>Fragen</span></article>
+			</div>
+			<div class="end-links">
+				<a class="primary-link" href={`/replay/${data.id}`}>Replay ansehen →</a>
+				{#if questionCount > 0}<a class="secondary export-link" href={`/present/${data.id}/questions`}>Fragen exportieren</a>{/if}
+				<a class="secondary-link" href="/new">Neue Session</a>
+			</div>
+		</section>
+	</main>
+{:else}
 <main>
 	<header class="topbar">
 		<div><span class="mono kicker">REMOTE CONTROL</span><strong>{current + 1} / {total}</strong></div>
-		<nav><a href={`/present/${data.id}/stats`}>Stats</a><button onclick={() => (showJoin = !showJoin)}>Join</button></nav>
+		<nav><a href={`/present/${data.id}/stats`}>Stats</a><button onclick={() => (showJoin = !showJoin)}>Join</button><button aria-expanded={showSession} onclick={() => (showSession = !showSession)}>Session</button></nav>
 	</header>
+	{#if showSession}
+		<section class="session-menu" aria-label="Session-Menü"><p>Steuerung für diese Live-Session.</p><button onclick={requestEnd}>Session beenden</button></section>
+	{/if}
 
 	{#if showJoin}
 		<section class="join-sheet" aria-label="Join Drawer">
@@ -77,7 +167,7 @@
 			<div class="coach-body">
 				<section class="signal-strip" aria-label="Live Signale">
 					<article><strong>{stats.currentViewers}</strong><span>dabei</span></article>
-					<article><strong>{stats.questions}</strong><span>Fragen</span></article>
+					<article><strong>{questionCount}</strong><span>Fragen</span></article>
 					<article><strong>{stats.bookmarks}</strong><span>Merker</span></article>
 					<article class:hot={reopen.tone === 'hot'}><strong>{dashboard.reopenRate}%</strong><span>Re-Open</span></article>
 				</section>
@@ -94,9 +184,29 @@
 
 	<footer class="remote-controls">
 		<button class="secondary" onclick={() => go(current - 1)} disabled={current === 0}>← Zurück</button>
-		<button class="primary" onclick={() => go(current + 1)} disabled={current === total - 1}>Weiter</button>
+		{#if current === total - 1}<button class="primary" onclick={requestEnd}>Session beenden →</button>{:else}<button class="primary" onclick={() => go(current + 1)}>Weiter</button>{/if}
 	</footer>
+	{#if showEndDialog}
+		<div class="dialog-backdrop" role="presentation">
+			<div class="end-dialog" role="dialog" aria-modal="true" aria-labelledby="end-title">
+				<span class="mono kicker">SESSION BEENDEN</span>
+				<h2 id="end-title">Session für alle beenden?</h2>
+				<p>Alle Viewer wechseln sofort zum End-Screen. Danach kannst du Replay und Fragen noch nutzen, solange der Room vorgehalten wird.</p>
+				{#if endError}<p class="end-error" role="alert">{endError}</p>{/if}
+				<div class="dialog-actions">
+					{#if questionCount > 0 && !questionsExported}
+						<button class="dialog-primary" disabled={ending} onclick={() => endSession(true)}>{ending ? 'Beende …' : 'Exportieren und beenden'}</button>
+						<button disabled={ending} onclick={() => endSession(false)}>Ohne Export beenden</button>
+					{:else}
+						<button class="dialog-primary" disabled={ending} onclick={() => endSession(false)}>{ending ? 'Beende …' : 'Session beenden'}</button>
+					{/if}
+					<button disabled={ending} onclick={() => { showEndDialog = false; endError = ''; }}>Abbrechen</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 </main>
+{/if}
 
 <style>
 	main { min-height: 100dvh; display: flex; flex-direction: column; gap: 10px; padding: max(12px, env(safe-area-inset-top)) 14px max(112px, calc(env(safe-area-inset-bottom) + 92px)); background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 36%), var(--bg); }
@@ -107,7 +217,10 @@
 	nav { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 	nav a, nav button, .coach-toggle, .secondary, .primary { border: 1px solid var(--hair); border-radius: 999px; background: var(--surface); color: var(--fg); text-decoration: none; min-height: 44px; padding: 0 14px; font-weight: 760; }
 	nav a, nav button { appearance: none; display: inline-flex; align-items: center; justify-content: center; min-width: 62px; height: 44px; padding: 0 12px; line-height: 1; font-size: 14px; letter-spacing: -.15px; white-space: nowrap; box-shadow: none; }
-	.join-sheet, .remote-stage, .coach-card, .notes, .feed { border: 1px solid var(--hair); border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--shadow-soft); }
+	.join-sheet, .remote-stage, .coach-card, .notes, .feed, .session-menu { border: 1px solid var(--hair); border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--shadow-soft); }
+	.session-menu { padding: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+	.session-menu p { color: var(--muted); font-size: 12px; }
+	.session-menu button { min-height: 44px; border: 1px solid var(--hair); border-radius: 999px; background: transparent; color: var(--fg); padding: 0 14px; font-weight: 760; }
 	.join-sheet { display: grid; grid-template-columns: 112px 1fr; gap: 14px; align-items: center; padding: 14px; }
 	.join-sheet img { width: 112px; height: 112px; border-radius: 18px; background: #fff; padding: 7px; }
 	.join-sheet p { color: var(--muted); font-size: 12px; line-height: 1.4; }
@@ -142,6 +255,28 @@
 	.remote-controls .secondary { background: color-mix(in srgb, var(--bg) 94%, var(--fg) 6%); backdrop-filter: blur(18px); }
 	.remote-controls .primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-size: 22px; }
 	.remote-controls button:disabled { opacity: .42; }
+	.dialog-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; align-items: end; background: color-mix(in srgb, #000 64%, transparent); padding: 12px; }
+	.end-dialog { width: min(100%, 620px); margin: 0 auto; border: 1px solid var(--hair); border-radius: 28px; background: var(--bg); padding: 20px; box-shadow: var(--shadow-soft); }
+	.end-dialog h2 { margin-top: 8px; font-size: clamp(26px, 8vw, 40px); line-height: 1; letter-spacing: -1px; }
+	.end-dialog p { margin-top: 12px; color: var(--muted); line-height: 1.5; }
+	.end-dialog .end-error { color: var(--fg); border-left: 3px solid var(--accent); padding-left: 10px; }
+	.dialog-actions { display: grid; gap: 8px; margin-top: 18px; }
+	.dialog-actions button { min-height: 52px; border: 1px solid var(--hair); border-radius: 999px; background: var(--surface); color: var(--fg); font: inherit; font-weight: 780; }
+	.dialog-actions .dialog-primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+	.end-state { min-height: 100dvh; display: grid; place-items: center; padding: 24px; }
+	.end-card { width: min(100%, 560px); border: 1px solid var(--hair); border-radius: 30px; background: var(--surface); box-shadow: var(--shadow-soft); padding: clamp(22px, 7vw, 38px); }
+	.end-card h1 { margin-top: 10px; font-size: clamp(32px, 9vw, 54px); line-height: .96; letter-spacing: -1.6px; }
+	.end-card > p { margin-top: 12px; color: var(--muted); line-height: 1.5; }
+	.end-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 20px; }
+	.end-stats article { border: 1px solid var(--hair); border-radius: 18px; padding: 12px; }
+	.end-stats strong, .end-stats span { display: block; }
+	.end-stats strong { font-size: 24px; }
+	.end-stats span { margin-top: 2px; color: var(--muted); font-size: 10px; }
+	.end-links { display: grid; gap: 10px; margin-top: 20px; }
+	.primary-link, .secondary-link { display: flex; align-items: center; justify-content: center; min-height: 52px; border-radius: 999px; text-decoration: none; font-weight: 800; }
+	.primary-link { background: var(--accent); color: var(--accent-fg); }
+	.secondary-link { color: var(--muted); min-height: 44px; }
+	.export-link { display: flex; align-items: center; justify-content: center; min-height: 48px; text-decoration: none; }
 	@media (max-height: 700px) { .mini-slide { width: min(50vw, 220px); max-height: 24dvh; } .slide-title h1 { font-size: clamp(22px, 7vw, 34px); } .notes, .feed { display:none; } }
 	@media (min-width: 780px) { main { max-width: 780px; margin: 0 auto; } .mini-slide { max-height: 56dvh; } }
 </style>

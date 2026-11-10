@@ -53,12 +53,18 @@ The remote's header shows how many viewers are connected (**● N live**) and th
 
 A room ends when:
 
-- the presenter's client calls `DELETE /present/:id/slide` (see the [HTTP API](http-api.md#end-a-room)); the remote has no end button yet;
+- the presenter confirms **Session beenden** in the remote, either from the **Session** menu or in place of **Weiter** on the final slide; the client then calls `DELETE /present/:id/slide` (see the [HTTP API](http-api.md#end-a-room));
 - it has been idle for 12 hours;
-- the instance already holds 500 rooms and a new one starts (the least recently active room is closed);
+- the instance already holds 500 rooms and a new one starts (ended rooms are evicted first, then the least recently active room);
 - the server restarts or redeploys ([ADR 0002](adr/0002-in-memory-live-rooms.md)).
 
-Viewers then see an end screen with a link to the replay.
+The confirmation explains that every viewer moves to the end screen. If the room has questions, the presenter can choose **Exportieren und beenden** or explicitly end without an export. The client first waits for the successful `DELETE` (or its `410 already_ended` retry response), adopts the server-owned end summary and then starts the question download as a navigation. Offline and server errors keep the remote live and offer retry; the UI never claims the room ended before the server acknowledges it.
+
+Open viewer and presenter streams receive `ended` and close. A viewer that was offline at that moment receives the same one-shot `ended` event when EventSource reconnects. Viewers then see a dedicated end screen with **Replay ansehen** as the single primary action.
+
+Ended rooms stay in memory for `EB_ENDED_ROOM_TTL_MS` (30 minutes by default, minimum 5 seconds). Invalid or shorter values fall back to the default with a boot warning. During that window presenter reloads and other presenter tabs see the same server-owned end summary and can still export question text. A periodic unref'ed sweep, with a minimum interval of 10 seconds, removes expired ended rooms. Capacity eviction also removes ended rooms before active idle rooms.
+
+After a sweep or process restart, viewer routes fall back to the activity store. A persisted replay still produces the end screen. PIN replays stored after migration 005 accept the existing signed unlock cookie or verify a newly entered PIN against a persisted HMAC verifier; the raw PIN is never stored. Protected rows created before migration 005 have no verifier and are treated as unknown (`410`), so the UI does not offer an impossible PIN prompt. Rotating `EB_MAGIC_LINK_SECRET` invalidates stored PIN verifiers and leaves affected protected replays locked. Without `EB_ACTIVITY_STORE=postgres`, a restart loses both live status and replay fallback, so the viewer returns the normal friendly `410` once no in-memory room remains.
 
 ## After the session
 
@@ -77,8 +83,9 @@ Replays outlive the room only with `EB_ACTIVITY_STORE=postgres`. Without it, the
 |---|---|---|
 | Viewers per room | 300 concurrent | stream returns `503 busy` |
 | Presenter streams per room | 10 | stream closes |
-| Rooms per instance | 500 | oldest idle room is closed |
+| Rooms per instance | 500 | ended room first, otherwise oldest idle room is closed |
 | Idle room lifetime | 12 hours | room is closed |
+| Ended room lifetime | 30 minutes by default, minimum 5 seconds | room is removed; configure with `EB_ENDED_ROOM_TTL_MS` |
 | Viewer signals | 60 per minute per IP and room | `429` |
 | Rooms created | 30 per 10 minutes per IP | `429` |
 

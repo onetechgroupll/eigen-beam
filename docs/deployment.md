@@ -87,7 +87,13 @@ EB_MAGIC_LINK_SECRET=<random, at least 32 bytes>
 EB_DECK_STORE=postgres
 EB_ACTIVITY_STORE=postgres
 DATABASE_URL=postgres://...
+# Optional; defaults to 30 minutes (milliseconds, minimum 5000)
+EB_ENDED_ROOM_TTL_MS=1800000
 ```
+
+Values below 5 seconds or invalid values fall back to the 30-minute default and emit one boot warning. The ended-room sweep runs at least every 10 seconds and at most every 5 minutes.
+
+Migration `005_replay_pin_verifier.sql` keeps only an HMAC verifier for PIN-protected replay unlocks after a restart; raw room PINs are never persisted. Only replay sessions stored after migration 005 have that verifier. Older protected rows are treated as unknown (`410`) instead of showing a PIN form that cannot succeed. The verifier is derived with `EB_MAGIC_LINK_SECRET`, so rotating that secret invalidates stored PIN verifiers and leaves those protected replays locked.
 
 **Assets (any S3-compatible store)**
 
