@@ -12,7 +12,7 @@ if [[ -n "${EB_MCP_URL:-}" ]]; then
 elif [[ -s "$URL_FILE" ]]; then
   MCP_URL="$(tr -d '\n\r' < "$URL_FILE")"
 else
-  MCP_URL="http://localhost:5173/mcp"
+  MCP_URL="http://localhost:4176/mcp"
 fi
 
 # GUI apps on macOS often do not inherit the interactive shell PATH. Include the

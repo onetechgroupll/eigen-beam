@@ -9,6 +9,7 @@ export function localClarify(title: string, source: string): ClarifyResult {
 		const lines: string[] = [];
 		if (slide.eyebrow) lines.push(escapeReservedSourceLine(oneIdea(slide.eyebrow, 42)));
 		if (slide.kind && slide.kind !== 'text') lines.push(`type: ${slide.kind}`);
+		else if (slide.image) lines.push('type: text');
 		lines.push(`# ${oneIdea(slide.headline, 68)}`);
 		if (slide.body) lines.push(escapeReservedSourceLine(oneIdea(slide.body, 110)));
 		if (slide.image) lines.push(`![${oneIdea(slide.headline, 80)}](${slide.image})`);

@@ -3,7 +3,7 @@ import type { CompareBlock, Slide, SlideKind, TimelineItem } from '$lib/decks';
 const SEPARATOR = /^\s*---\s*$/;
 const HEADING = /^\s*#{1,6}\s+(.*\S)\s*$/;
 const IMAGE = /!\[([^\]]*)\]\(\s*([^)\s]+)[^)]*\)/;
-const DIRECTIVE = /^\s*([a-zA-Z][a-zA-Z0-9_-]*)\s*:\s*(.*)$/;
+const DIRECTIVE = /^\s*([a-zA-Z][a-zA-Z0-9_-]*)\s*:\s*([\s\S]*)$/;
 const REVEAL = /^\s*(?:\+\+|>>|reveal:)\s*(.+)$/i;
 // Timeline entry `- label: text`. A spaced separator (`: ` or ` – `) wins, so
 // labels may contain colons and hyphens (`- 09:30: Kick-off`, `- Kick-off - Start`).

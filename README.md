@@ -66,7 +66,31 @@ docker build -t eigen-beam .
 docker run -p 3000:3000 -v eigenbeam-data:/data -e ORIGIN=http://localhost:3000 eigen-beam
 ```
 
-For a public instance with Postgres, S3-compatible storage and real mail, follow the [self-hosting guide](docs/deployment.md).
+**First login with Docker Compose:**
+
+```bash
+export EB_MAGIC_LINK_SECRET="$(openssl rand -hex 32)"
+docker compose up -d
+# Open http://localhost:3000/account and request a login link, then:
+docker compose logs -f eigen-beam
+```
+
+Open the URL on the highlighted `=== LOGIN LINK ===` line and start creating decks. [`compose.yaml`](compose.yaml) builds the image from your checkout, includes Postgres, MinIO and persistent volumes, runs migrations on boot and binds to `127.0.0.1` by default (`EB_BIND` overrides). Once releases are published, switch the `image:` line to an immutable tag like `ghcr.io/onetechgroupll/eigen-beam:v0.1.0` and drop the `build:` line. Before exposing the stack publicly, set real secrets and follow the [self-hosting guide](docs/deployment.md).
+
+**Use MCP clients:**
+
+The local Bearer-authenticated endpoint is `http://localhost:4176/mcp`. Create one token for the server and the client wrapper, then register that wrapper with Claude Code:
+
+```bash
+mkdir -p .data/secrets
+export EB_MCP_TOKEN="$(openssl rand -hex 32)"
+printf '%s' "$EB_MCP_TOKEN" > .data/secrets/eigenbeam-mcp-token.txt
+printf '%s\n' 'http://localhost:4176/mcp' > .data/secrets/eigenbeam-mcp-url.txt
+claude mcp add eigenbeam -- ./scripts/eigenbeam-mcp.sh
+EB_MCP_TOKEN="$EB_MCP_TOKEN" bun run dev -- --port 4176
+```
+
+`EB_MCP_URL` overrides the URL file for another instance. The wrapper sends `EB_MCP_TOKEN` as a Bearer token and keeps it out of `.mcp.json`; see the [Claude Code setup](docs/mcp-claude-code.md) and [MCP reference](docs/mcp.md).
 
 ### How it works
 

@@ -54,7 +54,11 @@ export class ConsoleEmailProvider implements EmailProvider {
 
 // ── Outbox-Provider (dev-verifizierbar: jede Mail als JSON auf Disk) ─────────
 export class OutboxEmailProvider implements EmailProvider {
-	constructor(private dir: string, private makeId: () => string = () => nanoid(12)) {}
+	constructor(
+		private dir: string,
+		private makeId: () => string = () => nanoid(12),
+		private log: (message: string) => void = console.info
+	) {}
 
 	async send(msg: EmailMessage): Promise<SentEmail> {
 		const id = this.makeId();
@@ -63,9 +67,25 @@ export class OutboxEmailProvider implements EmailProvider {
 		const tmp = join(this.dir, `${id}.${nanoid(6)}.tmp`);
 		await writeFile(tmp, JSON.stringify(record, null, 2), 'utf8');
 		await rename(tmp, join(this.dir, `${id}.json`)); // atomarer Swap
-		console.info(`[mail:outbox] → ${msg.to} · ${msg.subject} (.data/outbox/${id}.json)`);
+		const loginLine = devLoginLine(msg);
+		if (loginLine) this.log(loginLine);
+		this.log(`[mail:outbox] → ${msg.to} · ${msg.subject} (.data/outbox/${id}.json)`);
 		return { id, provider: 'outbox', to: msg.to, subject: msg.subject };
 	}
+}
+
+export function devLoginLine(msg: EmailMessage, source: Record<string, string | undefined> = env): string | null {
+	if (isProductionRuntime(source)) return null;
+	for (const candidate of msg.text.match(/https?:\/\/[^\s]+/g) ?? []) {
+		try {
+			const url = new URL(candidate);
+			const code = url.pathname === '/auth/verify' ? url.searchParams.get('token') : null;
+			if (code) return `=== LOGIN LINK === ${url.toString()} === LOGIN CODE === ${code} ===`;
+		} catch {
+			// Ignore unrelated malformed URLs and keep the outbox write successful.
+		}
+	}
+	return null;
 }
 
 // ── Resend-Provider (HTTP; braucht EB_RESEND_API_KEY) ───────────────────────
