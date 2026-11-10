@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 # METRICS_TOKEN is a fine-grained, repository-scoped, read-only token with
-# Contents and Metadata read access; no write access is needed on this token.
+# Contents, Metadata AND Administration read access — the traffic endpoints for
+# views and clones require Administration: read. No write access is needed.
 # The short-lived GITHUB_TOKEN writes only the generated CSV to data/metrics.
 permissions:
   contents: write
@@ -68,15 +69,18 @@ jobs:
           unique_views_14d="$(jq -r '.uniques' <<< "$views")"
           clones_14d="$(jq -r '.count' <<< "$clones")"
           unique_clones_14d="$(jq -r '.uniques' <<< "$clones")"
-          open_issues="$(gh api -X GET search/issues -f q="repo:$GITHUB_REPOSITORY is:issue is:open" --jq '.total_count')"
+          open_non_maintainer_issues="$(
+            gh api --paginate --page-limit 20 --slurp -X GET search/issues -f q="repo:$GITHUB_REPOSITORY is:issue is:open" -F per_page=100 \
+              --jq '[.[][] | select(.author_association != "OWNER" and .author_association != "MEMBER" and .author_association != "COLLABORATOR")] | length'
+          )"
           open_non_maintainer_prs="$(
-            gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" \
+            gh api --paginate --page-limit 20 --slurp "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" \
               --jq '[.[][] | select(.author_association != "OWNER" and .author_association != "MEMBER" and .author_association != "COLLABORATOR")] | length'
           )"
 
           # GHCR pulls and template deploys: once image exists. Until then,
           # both columns stay empty instead of reporting a synthetic zero.
-          row="$date,$stars,$forks,$watchers,$views_14d,$unique_views_14d,$clones_14d,$unique_clones_14d,$open_issues,$open_non_maintainer_prs,,"
+          row="$date,$stars,$forks,$watchers,$views_14d,$unique_views_14d,$clones_14d,$unique_clones_14d,$open_non_maintainer_issues,$open_non_maintainer_prs,,"
           echo "date=$date" >> "$GITHUB_OUTPUT"
           echo "row=$row" >> "$GITHUB_OUTPUT"
 
@@ -92,7 +96,7 @@ jobs:
 
           branch='data/metrics'
           encoded_branch='data%2Fmetrics'
-          header='date,stars,forks,watchers,views_14d,unique_views_14d,clones_14d,unique_clones_14d,open_issues,open_non_maintainer_prs,ghcr_pulls,template_deploys'
+          header='date,stars,forks,watchers,views_14d,unique_views_14d,clones_14d,unique_clones_14d,open_non_maintainer_issues,open_non_maintainer_prs,ghcr_pulls,template_deploys'
           bot_email='41898282+github-actions[bot]@users.noreply.github.com'
 
           if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$encoded_branch" >/dev/null 2>&1; then
