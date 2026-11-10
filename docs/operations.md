@@ -77,3 +77,12 @@ Do not use `smoke:replay` or `smoke:browser` as a high-frequency watchdog: they 
 ## Live sessions and deploys
 
 Restarts end active rooms ([ADR 0002](adr/0002-in-memory-live-rooms.md)). If you run a shared instance, announce deploy windows or deploy between sessions. `/present/:id/stats` and the presenter feed show whether a room is active.
+
+## One-time: make the GHCR image public
+
+GitHub has no REST endpoint for changing an org-owned container package's
+visibility. After the first release tag has been pushed, open the package page
+(`https://github.com/orgs/onetechgroupll/packages/container/eigen-beam`),
+choose **Package settings → Danger Zone → Change visibility → Public** once.
+Until then the image is visible to organisation members only and the release
+workflow finishes regardless.

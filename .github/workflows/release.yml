@@ -7,6 +7,12 @@ on:
 permissions:
   contents: read
 
+# One release build at a time: moving tags (vX.Y, latest) must publish in tag
+# order, not race two builders against each other.
+concurrency:
+  group: release-tags
+  cancel-in-progress: false
+
 env:
   IMAGE_NAME: ghcr.io/onetechgroupll/eigen-beam
 
@@ -86,15 +92,16 @@ jobs:
           push: true
           tags: ${{ steps.version.outputs.tags }}
 
-      - name: Keep the container package public
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh api --method PATCH /orgs/onetechgroupll/packages/container/eigen-beam -f visibility=public
+      # GHCR visibility for org-owned container packages has no REST endpoint;
+      # it is a one-time manual setting documented in docs/operations.md
+      # (Package settings → Change visibility → Public).
 
   github-release:
     name: Publish GitHub release
     needs: publish-image
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout full history
         uses: actions/checkout@v5
