@@ -23,7 +23,7 @@ This document captures eigen.beam's security-relevant surfaces and invariants.
 2. **Room ids are unguessable.** Use `nanoid`; no sequential ids.
 3. **Slide index changes are clamped.** Never allow `setSlide` outside `[0, slides.length - 1]`.
 4. **SSE write failures reap dead connections.** Do not swallow write errors without cleanup.
-5. **Public payloads are serialized.** Public viewer/replay/share/export data must not leak `ownerId`, raw `source`, `speakerNotes`, private markers or bearer tokens.
+5. **Public payloads are serialized.** Public viewer/replay/share and non-owner export data must not leak `ownerId`, raw `source`, `speakerNotes`, private markers or bearer tokens. An authenticated owner export may return the original source with notes.
 6. **Production auth fails closed.** Missing production secrets should block sensitive flows rather than falling back to dev behavior.
 7. **Import/AI endpoints require production user sessions.** They can process user content and may call providers when configured.
 8. **MCP tools require auth.** Missing token config means `/mcp` returns `401`; tool results never include presenter tokens.

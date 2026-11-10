@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { readFile, rm } from 'node:fs/promises';
 import { parseDeck, sanitizeImageUrl } from '../src/lib/deck-parse.ts';
-import { DECK_TEMPLATE, toPublicSlides } from '../src/lib/decks.ts';
+import { DECK_TEMPLATE, publicSlidesToSource, toPublicSlides, type Deck, type PublicSlide } from '../src/lib/decks.ts';
 import { slideFitProfile } from '../src/lib/slide-quality.ts';
 import { applyQualityFix, deckReadyCheck } from '../src/lib/deck-quality.ts';
 import { MemoryDeckRepository, FileDeckRepository, PostgresDeckRepository } from '../src/lib/server/decks-repo.ts';
@@ -29,7 +29,7 @@ import { applySentimentSignal, conversionCta, liveSentimentLabel, pacingHint, re
 import { fieldTestChecklist, liveStatsDashboard } from '../src/lib/stats-dashboard.ts';
 import { presenterFeedItem } from '../src/lib/presenter-feed.ts';
 import { accountProfileFromSession, teamIdForEmail, toDeckLibraryItems } from '../src/lib/account.ts';
-import { deckExportFilename, deckToPublicExportJson, deckToPublicExportMarkdown } from '../src/lib/server/deck-export.ts';
+import { deckExportFilename, deckExportJsonFor, deckExportMarkdownFor, deckToOwnerExportJson, deckToOwnerExportMarkdown, deckToPublicExportJson, deckToPublicExportMarkdown, type OwnerDeckExportJson } from '../src/lib/server/deck-export.ts';
 import { buildTakeaway } from '../src/lib/server/takeaway.ts';
 import { buildFollowUpPack } from '../src/lib/follow-up-pack.ts';
 import { buildSessionSummary } from '../src/lib/session-summary.ts';
@@ -115,11 +115,14 @@ async function main() {
 		ok('leeres Source ergibt []');
 	}
 
-	// 7) CRLF wird normalisiert
+	// 7) CRLF und einzelne CR werden vor dem Parsen normalisiert
 	{
-		const slides = parseDeck('# A\r\n---\r\n# B');
-		assert.equal(slides.length, 2);
-		ok('CRLF-Zeilenenden werden normalisiert');
+		assert.deepEqual(parseDeck('# A\r\n---\r\n# B').map((slide) => slide.headline), ['A', 'B']);
+		assert.deepEqual(parseDeck('# C\r---\r# D').map((slide) => slide.headline), ['C', 'D']);
+		const exported = publicSlidesToSource([{ headline: 'CR body', body: 'sichtbar\rnotes: bleibt Body' }]);
+		assert.match(exported, /^\\notes: bleibt Body$/m);
+		assert.deepEqual(parseDeck(exported)[0], { headline: 'CR body', body: 'sichtbar notes: bleibt Body' });
+		ok('CRLF und einzelne CR werden normalisiert; CR-Body kann keine Direktive injizieren');
 	}
 
 	// 8) Blocktypen + Reveal
@@ -145,6 +148,119 @@ async function main() {
 		const template = parseDeck(DECK_TEMPLATE).find((s) => s.kind === 'timeline');
 		assert.deepEqual(template?.timeline?.map((i) => i.label), ['00:00', '00:15', '05:00']);
 		ok('Timeline: Uhrzeit-Labels, gespaced Trenner, kompakte Fallback-Syntax');
+	}
+
+	// 8c) Public export roundtript alle Slide-Typen und optionalen Felder
+	{
+		const slides: PublicSlide[] = [
+			{ eyebrow: 'Context', headline: 'Text slide', body: 'notes: geheim', image: 'https://cdn.example.test/text.png', reveal: ['First reveal'] },
+			{ kind: 'number', eyebrow: 'Signal', headline: 'Conversion', body: 'type: quote', metric: '42 %' },
+			{ kind: 'quote', eyebrow: 'Customer', headline: 'Customer voice', quote: 'We stopped sending PDFs.', attribution: 'Head of Sales', reveal: ['Show source'] },
+			{ kind: 'image', headline: 'Cover', body: 'left: still body text', image: '/assets/cover.png' },
+			{ kind: 'compare', headline: 'Before / after', compare: { leftTitle: 'PDF', leftBody: 'Async', rightTitle: 'Live', rightBody: 'In sync' } },
+			{ kind: 'timeline', headline: 'Rollout', timeline: [{ label: '09:30', text: 'Kick-off' }, { label: 'Q2', text: 'Launch' }], image: 'https://cdn.example.test/plan.png' },
+			{ kind: 'compare', eyebrow: 'Extras', headline: 'Compare mit Reveal', compare: { leftTitle: 'L', leftBody: 'LB', rightTitle: 'R', rightBody: 'RB' }, reveal: ['Extra'] },
+			{ kind: 'number', headline: 'Zahl mit Bild', metric: '7', image: 'https://cdn.example.test/n.png' }
+		];
+		const exported = publicSlidesToSource(slides);
+		assert.deepEqual(parseDeck(exported), slides);
+		assert.equal(publicSlidesToSource(parseDeck(exported)), exported);
+		ok('Public Markdown roundtript alle 6 Typen und bleibt beim Doppel-Re-Export byte-stabil');
+	}
+
+	// 8d) Das kanonische Bild bleibt bei weiteren Bildern im Body das erste Bild
+	{
+		const slide: PublicSlide = {
+			headline: 'Two images',
+			body: 'Body copy ![secondary](https://cdn.example.test/secondary.png)',
+			image: 'https://cdn.example.test/primary.png'
+		};
+		const exported = publicSlidesToSource([slide]);
+		assert.ok(exported.indexOf('primary.png') < exported.indexOf('secondary.png'));
+		assert.deepEqual(parseDeck(exported)[0], slide);
+		ok('Public Markdown schreibt das kanonische Bild vor weitere Body-Bilder');
+	}
+
+	// 8e) Reservierte Body-Syntax wird nur mit explizitem Backslash-Escape interpretiert
+	{
+		const bodies = [
+			'notes: geheim',
+			'topic: bleibt Text',
+			'++ x',
+			'>> x',
+			'reveal: x',
+			'- a: b',
+			'- Q1:Pilot',
+			'- Q1-Pilot',
+			'- Q1: a\u2028b',
+			'# Kein Heading',
+			'left: bleibt Text',
+			'---',
+			'NOTES: upper',
+			'\\notes: ein Backslash',
+			'\\\\notes: zwei Backslashes',
+			'\\\\\\notes: drei Backslashes',
+			'\\',
+			'\\hallo'
+		];
+		const slides: PublicSlide[] = bodies.map((body, index) => ({ headline: `Escape ${index + 1}`, body }));
+		const exported = publicSlidesToSource(slides);
+		assert.match(exported, /^\\notes: geheim$/m);
+		assert.match(exported, /^topic: bleibt Text$/m);
+		assert.match(exported, /^\\\+\+ x$/m);
+		assert.match(exported, /^\\>> x$/m);
+		assert.match(exported, /^\\reveal: x$/m);
+		assert.match(exported, /^\\- a: b$/m);
+		assert.match(exported, /^\\- Q1:Pilot$/m);
+		assert.match(exported, /^\\- Q1-Pilot$/m);
+		assert.match(exported, /^\\# Kein Heading$/m);
+		assert.match(exported, /^\\left: bleibt Text$/m);
+		assert.match(exported, /^\\---$/m);
+		assert.match(exported, /^\\NOTES: upper$/m);
+		const indented = publicSlidesToSource([{ headline: 'Indent', body: '  notes: indent' }]);
+		assert.match(indented, /^ {2}\\notes: indent$/m);
+		assert.equal(parseDeck(indented)[0].body, 'notes: indent');
+		assert.deepEqual(parseDeck(exported).map((slide) => slide.body), bodies);
+		assert.deepEqual(parseDeck('# Existing\ntopic: bleibt Text')[0], { headline: 'Existing', body: 'topic: bleibt Text' });
+		assert.deepEqual(parseDeck('# Existing quote field\nquote: bleibt Text')[0], { headline: 'Existing quote field', body: 'quote: bleibt Text' });
+		ok('Body-Escapes schützen Direktiven, kompakte Timeline und 1–3 führende Backslashes');
+	}
+
+	// 8f) Quote-Direktiven gelten nur für den finalen Typ und leere Werte fallen auf Legacy zurück
+	{
+		assert.deepEqual(parseDeck('type: quote\ntype: text\n# Text\nquote: literal\nattribution: literal')[0], {
+			headline: 'Text',
+			body: 'quote: literal attribution: literal'
+		});
+		assert.deepEqual(parseDeck('type: text\nkind: quote\n# Customer\n> Legacy quote\n— Legacy author\nquote: Export quote\nattribution: Export author')[0], {
+			headline: 'Customer',
+			kind: 'quote',
+			quote: 'Export quote',
+			attribution: 'Export author'
+		});
+		assert.deepEqual(parseDeck('type: quote\n# Customer\nquote:\nattribution:\n> Legacy quote\n— Legacy author')[0], {
+			headline: 'Customer',
+			kind: 'quote',
+			quote: 'Legacy quote',
+			attribution: 'Legacy author'
+		});
+		ok('Quote-Direktiven folgen dem letzten Typ, gewinnen vor Legacy und fallen leer zurück');
+	}
+
+	// 8f) Owner-Export-Entscheidung und Clone-Komposition sind gepinnt
+	{
+		const rich = parseDeck('# A\nnotes: privat\n---\n# B\ntype: number\nmetric: 9\n');
+		const publicSlides = toPublicSlides(rich);
+		const cloneSource = publicSlidesToSource(publicSlides);
+		assert.equal(cloneSource.includes('notes:'), false);
+		assert.deepEqual(parseDeck(cloneSource), publicSlides);
+		const ownerDeck: Deck = { id: 'deckown', title: 'T', source: '# A\nnotes: privat', slides: rich, ownerId: 'user-x', createdAt: 0, updatedAt: 0 };
+		assert.equal(deckExportMarkdownFor(ownerDeck, 'user-x'), ownerDeck.source);
+		assert.equal(deckExportMarkdownFor(ownerDeck, 'attacker').includes('privat'), false);
+		assert.equal('source' in deckExportJsonFor(ownerDeck, 'attacker'), false);
+		assert.equal('source' in deckExportJsonFor(ownerDeck, null), false);
+		assert.equal((deckExportJsonFor(ownerDeck, 'user-x') as OwnerDeckExportJson).source, ownerDeck.source);
+		ok('Owner-Export nur für den Owner; Clone baut aus Public Slides ohne Notes');
 	}
 
 	// 9) Presenter notes werden für öffentliche Payloads entfernt
@@ -451,8 +567,16 @@ Kurz.`;
 		assert.equal(exportedJson.slideCount, 1);
 		assert.equal('source' in exportedJson, false);
 		assert.equal(JSON.stringify(exportedJson).includes('notes: privat'), false);
+		assert.equal(deckToOwnerExportMarkdown(older), older.source);
+		assert.equal(deckToOwnerExportJson(older).source, older.source);
+		assert.equal(deckToOwnerExportJson(older).source.includes('notes: privat'), true);
+		const forgedNonOwner = canEditDeck(older, 'attacker')
+			? deckToOwnerExportJson(older)
+			: deckToPublicExportJson(older);
+		assert.equal('source' in forgedNonOwner, false);
+		assert.equal(JSON.stringify(forgedNonOwner).includes('notes: privat'), false);
 		assert.equal(deckExportFilename('Pitch: Q3 / Retail Media!', 'md'), 'pitch-q3-retail-media.md');
-		ok('Deck-Export liefert public-safe Markdown/JSON ohne Source oder Speaker Notes');
+		ok('Owner-Export behält Original-Source; ein gefälschter Nicht-Owner bleibt ohne Source oder Notes');
 
 		assert.equal(teamIdForEmail('Lucas@Example.COM'), 'team_example.com');
 		assert.deepEqual(accountProfileFromSession({ email: 'Lucas@Example.COM', userId: 'user-lucas' }), {

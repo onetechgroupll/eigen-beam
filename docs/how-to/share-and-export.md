@@ -45,17 +45,17 @@ curl -b jar -OJ https://beam.example.com/api/decks/<deckId>/export/md
 curl -b jar -OJ https://beam.example.com/api/decks/<deckId>/export/json
 ```
 
-Exports contain public slides only: no speaker notes and no owner. The Markdown export is valid [deck syntax](../deck-syntax.md), but it is rebuilt from the parsed slides, not your original source, so a re-import is not lossless:
+As the owner, a Markdown export is your original source and a JSON export includes that source, including speaker notes. Anyone else with view access gets public slides only: no source, speaker notes or owner data.
 
-- `number` slides lose their `number:` line; the value comes back as body text and the headline becomes the big number.
-- `quote` slides write the quote in typographic quotes instead of a `>` line; on re-import the headline becomes the quote and the original quote text is dropped.
-- Uploaded images keep their relative `/assets/…` path, which only resolves on the instance that stores them. Download and re-upload them when you move to another instance.
+Public Markdown is valid [deck syntax](../deck-syntax.md). It roundtrips all six slide types and automatically escapes body lines that look like reserved deck syntax. Re-importing it preserves the public slide content but cannot restore private speaker notes.
 
-Restore those lines after pasting, or keep your original source (the editor, or `source` from `GET /api/decks/:id` as owner) if you need an exact copy.
+### Image boundary
+
+Uploaded images keep their relative `/assets/…` path. The exported Markdown or clone preserves that path, but the image bytes remain stored on the original eigen.beam instance. A path therefore resolves only while that instance still serves the asset. Download and re-upload the images when moving a deck to another instance, then replace the paths in the imported deck.
 
 ## Let others copy it
 
-Anyone who can view a deck can clone it with **Deck klonen** on the recap page or `POST /api/decks/<deckId>/clone`. The copy belongs to them, is titled `<title> Kopie` and has no speaker notes. It is built the same way as the Markdown export, so `number` and `quote` slides lose detail as described above.
+Anyone who can view a deck can clone it with **Deck klonen** on the recap page or `POST /api/decks/<deckId>/clone`. The copy belongs to them, is titled `<title> Kopie` and has no speaker notes. All public slide content is preserved, subject to the instance-bound image paths described above.
 
 ## Verification
 
@@ -68,7 +68,7 @@ Open the share link in a private window. `link` decks render; `private` decks sh
 | `Team-Sharing braucht einen Magic-Link-Login.` (401) | not signed in | sign in on `/account` first |
 | `Kein Zugriff auf dieses Deck.` (403) | you are not the owner, or the viewer lacks access | change visibility as the owner |
 | A colleague cannot see a `team` deck | different email domain, or not signed in | they sign in with their work address |
-| Speaker notes missing in the export | by design | keep notes in your own copy |
+| Speaker notes missing in the export | you exported as a non-owner | sign in as the deck owner; owner Markdown/JSON exports include the original source with notes |
 
 ## Related
 

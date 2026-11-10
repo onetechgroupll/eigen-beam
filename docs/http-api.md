@@ -86,7 +86,7 @@ curl -c jar -b jar -X POST https://beam.example.com/api/decks \
 
 ### Export a deck
 
-`GET /api/decks/:id/export/md` (or `markdown`) and `GET /api/decks/:id/export/json`. Needs view access. Returns a file download (`content-disposition: attachment`) built from public slides only (no speaker notes, no owner).
+`GET /api/decks/:id/export/md` (or `markdown`) and `GET /api/decks/:id/export/json`. Needs view access. For the owner, Markdown returns the original `source` and JSON includes it, preserving speaker notes. Every non-owner response is rebuilt from public slides and contains no `source`, speaker notes or owner data.
 
 ### Upload an image
 

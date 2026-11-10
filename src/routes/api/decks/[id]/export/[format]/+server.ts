@@ -1,8 +1,9 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { deckViewerFromCookies, canViewDeck } from '$lib/server/deck-access';
-import { attachmentHeaders, deckExportFilename, deckToPublicExportJson, deckToPublicExportMarkdown } from '$lib/server/deck-export';
+import { attachmentHeaders, deckExportFilename, deckExportJsonFor, deckExportMarkdownFor } from '$lib/server/deck-export';
 import { getDeckRepo, isValidDeckId } from '$lib/server/decks-repo';
+import { getActorId } from '$lib/server/identity';
 
 type ExportFormat = 'md' | 'json';
 
@@ -13,14 +14,15 @@ export const GET: RequestHandler = async ({ params, cookies }) => {
 	const deck = await getDeckRepo().get(params.id);
 	if (!deck) throw error(404, 'Deck nicht gefunden');
 	if (!canViewDeck(deck, deckViewerFromCookies(cookies))) throw error(403, 'Kein Zugriff auf dieses Deck.');
+	const actorId = getActorId(cookies);
 
 	if (format === 'json') {
-		return new Response(JSON.stringify(deckToPublicExportJson(deck), null, 2), {
+		return new Response(JSON.stringify(deckExportJsonFor(deck, actorId), null, 2), {
 			headers: attachmentHeaders(deckExportFilename(deck.title, 'json'), 'application/json; charset=utf-8')
 		});
 	}
 
-	return new Response(deckToPublicExportMarkdown(deck), {
+	return new Response(deckExportMarkdownFor(deck, actorId), {
 		headers: attachmentHeaders(deckExportFilename(deck.title, 'md'), 'text/markdown; charset=utf-8')
 	});
 };

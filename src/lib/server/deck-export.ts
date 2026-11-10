@@ -1,4 +1,5 @@
 import { publicSlidesToSource, toPublicSlides, type Deck, type PublicSlide } from '$lib/decks';
+import { canEditDeck } from '$lib/server/deck-access';
 
 export type PublicDeckExportJson = {
 	id: string;
@@ -6,6 +7,10 @@ export type PublicDeckExportJson = {
 	slideCount: number;
 	updatedAt: number;
 	slides: PublicSlide[];
+};
+
+export type OwnerDeckExportJson = PublicDeckExportJson & {
+	source: string;
 };
 
 export function deckToPublicExportMarkdown(deck: Deck): string {
@@ -21,6 +26,26 @@ export function deckToPublicExportJson(deck: Deck): PublicDeckExportJson {
 		updatedAt: deck.updatedAt,
 		slides
 	};
+}
+
+export function deckToOwnerExportMarkdown(deck: Deck): string {
+	return deck.source;
+}
+
+export function deckToOwnerExportJson(deck: Deck): OwnerDeckExportJson {
+	return {
+		...deckToPublicExportJson(deck),
+		source: deck.source
+	};
+}
+
+/** Owner-Entscheidung testbar gehalten: Die Route reicht nur den Actor herein. */
+export function deckExportMarkdownFor(deck: Deck, actorId: string | null): string {
+	return canEditDeck(deck, actorId) ? deckToOwnerExportMarkdown(deck) : deckToPublicExportMarkdown(deck);
+}
+
+export function deckExportJsonFor(deck: Deck, actorId: string | null): PublicDeckExportJson | OwnerDeckExportJson {
+	return canEditDeck(deck, actorId) ? deckToOwnerExportJson(deck) : deckToPublicExportJson(deck);
 }
 
 export function deckExportFilename(title: string, ext: 'md' | 'json'): string {
