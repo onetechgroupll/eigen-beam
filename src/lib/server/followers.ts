@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { env } from 'node:process';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { getActivityStore } from '$lib/server/activity-store';
@@ -47,11 +47,17 @@ export function verifyUnsubToken(token: string, secret: string): string | null {
 	return isValidFollowEmail(email) ? email : null;
 }
 
-export async function recordFollow(input: { email: string; deckId?: string; roomId?: string }, path = env.EB_FOLLOWS_FILE ?? '.data/follows.json'): Promise<FollowRecord> {
+function defaultFollowsPath(): string {
+	// Align with the boot validation default: the follows file honours
+	// EB_DATA_DIR unless EB_FOLLOWS_FILE overrides it explicitly.
+	return env.EB_FOLLOWS_FILE ?? join(env.EB_DATA_DIR ?? '.data', 'follows.json');
+}
+
+export async function recordFollow(input: { email: string; deckId?: string; roomId?: string }, path = defaultFollowsPath()): Promise<FollowRecord> {
 	return (await recordFollowDetailed(input, path)).record;
 }
 
-export async function recordFollowDetailed(input: { email: string; deckId?: string; roomId?: string }, path = env.EB_FOLLOWS_FILE ?? '.data/follows.json'): Promise<FollowResult> {
+export async function recordFollowDetailed(input: { email: string; deckId?: string; roomId?: string }, path = defaultFollowsPath()): Promise<FollowResult> {
 	const email = normalizeFollowEmail(input.email);
 	if (!isValidFollowEmail(email)) throw Object.assign(new Error('Bitte eine gültige Email eingeben.'), { status: 400 });
 	const deckId = sanitizeFollowTarget(input.deckId);
@@ -68,7 +74,7 @@ export async function recordFollowDetailed(input: { email: string; deckId?: stri
 	return { record, isNew };
 }
 
-export async function removeFollowEmail(email: string, path = env.EB_FOLLOWS_FILE ?? '.data/follows.json'): Promise<number> {
+export async function removeFollowEmail(email: string, path = defaultFollowsPath()): Promise<number> {
 	const target = normalizeFollowEmail(email);
 	if (!isValidFollowEmail(target)) return 0;
 	const store = getActivityStore();

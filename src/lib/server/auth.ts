@@ -7,7 +7,10 @@ const USER_SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 const DEV_SECRET = 'dev-insecure-magic-link-secret';
 
 export function isProductionRuntime(source: Record<string, string | undefined> = env): boolean {
-	return source.NODE_ENV === 'production' || source.RAILWAY_ENVIRONMENT === 'production' || source.RAILWAY_ENVIRONMENT_NAME === 'production';
+	// Case-normalised like scripts/env-validation.mjs: NODE_ENV=Production must
+	// not silently enable dev paths (stdout login links, dev secret fallback).
+	const marker = (...names: string[]) => names.some((name) => (source[name] ?? '').toLowerCase() === 'production');
+	return marker('NODE_ENV', 'RAILWAY_ENVIRONMENT', 'RAILWAY_ENVIRONMENT_NAME');
 }
 
 export function authSigningSecret(): string {

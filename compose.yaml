@@ -25,6 +25,9 @@ services:
       EB_BUCKET_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-eigenbeam-local}
       EB_BUCKET_FORCE_PATH_STYLE: "true"
       EB_MAIL_PROVIDER: ${EB_MAIL_PROVIDER:-outbox}
+      # Optional: forward real mail provider credentials when switching off the outbox.
+      EB_RESEND_API_KEY: ${EB_RESEND_API_KEY:-}
+      EB_POSTMARK_TOKEN: ${EB_POSTMARK_TOKEN:-}
       # Required on purpose: with the empty dev default anyone who can reach the
       # port could forge magic links. Generate one, e.g.
       #   EB_MAGIC_LINK_SECRET=$(openssl rand -hex 32) docker compose up
