@@ -1,0 +1,96 @@
+# Local-first stack: builds the image from the checkout. Once the first release
+# is published, switch the image line to the immutable tag, e.g.
+#   image: ghcr.io/onetechgroupll/eigen-beam:v0.1.0
+# and drop `build:`. Override every local default before exposing this stack
+# publicly; environment details: docs/deployment.md. Migrations run on boot
+# (EB_MIGRATE_ON_BOOT, default true).
+services:
+  eigen-beam:
+    build: .
+    image: eigen-beam:local
+    restart: unless-stopped
+    ports:
+      - "${EB_BIND:-127.0.0.1:3000}:3000"
+    environment:
+      ORIGIN: ${ORIGIN:-http://localhost:3000}
+      EB_DATA_DIR: /data
+      EB_DECK_STORE: ${EB_DECK_STORE:-postgres}
+      EB_ACTIVITY_STORE: ${EB_ACTIVITY_STORE:-postgres}
+      DATABASE_URL: postgres://${POSTGRES_USER:-eigenbeam}:${POSTGRES_PASSWORD:-eigenbeam-local}@postgres:5432/${POSTGRES_DB:-eigenbeam}
+      EB_ASSET_STORE: ${EB_ASSET_STORE:-s3}
+      EB_BUCKET_ENDPOINT: http://minio:9000
+      EB_BUCKET_NAME: ${EB_BUCKET_NAME:-eigenbeam}
+      EB_BUCKET_REGION: ${EB_BUCKET_REGION:-auto}
+      EB_BUCKET_ACCESS_KEY: ${MINIO_ROOT_USER:-eigenbeam}
+      EB_BUCKET_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-eigenbeam-local}
+      EB_BUCKET_FORCE_PATH_STYLE: "true"
+      EB_MAIL_PROVIDER: ${EB_MAIL_PROVIDER:-outbox}
+      # Required on purpose: with the empty dev default anyone who can reach the
+      # port could forge magic links. Generate one, e.g.
+      #   EB_MAGIC_LINK_SECRET=$(openssl rand -hex 32) docker compose up
+      EB_MAGIC_LINK_SECRET: ${EB_MAGIC_LINK_SECRET:?set EB_MAGIC_LINK_SECRET, e.g. openssl rand -hex 32}
+      EB_MCP_TOKEN: ${EB_MCP_TOKEN:-}
+    volumes:
+      - eigenbeam-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-eigenbeam}
+      POSTGRES_USER: ${POSTGRES_USER:-eigenbeam}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eigenbeam-local}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-eigenbeam}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-eigenbeam-local}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-eigenbeam}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-eigenbeam-local}
+      MINIO_BUCKET: ${EB_BUCKET_NAME:-eigenbeam}
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+        mc mb --ignore-existing "local/$${MINIO_BUCKET}"
+
+volumes:
+  eigenbeam-data:
+  postgres-data:
+  minio-data:

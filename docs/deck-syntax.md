@@ -51,6 +51,7 @@ Rules for text:
 ## Directives
 
 Directive keys are case-insensitive. A line counts as a directive only for these keys; any other `word: text` line stays normal text (so `Goal: more revenue` is safe in a body).
+Directive values keep Unicode line and paragraph separator characters (`U+2028` and `U+2029`) instead of truncating at them.
 
 | Directive | Effect |
 |---|---|

@@ -18,7 +18,7 @@ import { DEFAULT_CLAUDE_MODEL, claudeModel, parseDeckJson, requestDeckJson } fro
 import { sniffImage, S3AssetStore } from '../src/lib/server/assets.ts';
 import { claimPresenterToken, createRoom, endRoom, ENDED_ROOM_TTL_MS, evictRoomForCapacity, getReplay, getRoom, recordViewerEvent, removeRoom, resolveEndedRoomTiming, setSlide, sweepRooms } from '../src/lib/server/rooms.ts';
 import { createUnsubToken, escapeHtml, recordFollow, recordFollowDetailed, sanitizeFollowTarget, verifyUnsubToken } from '../src/lib/server/followers.ts';
-import { OutboxEmailProvider, getMailerForEnv, readOutbox } from '../src/lib/server/mailer.ts';
+import { devLoginLine, OutboxEmailProvider, getMailerForEnv, readOutbox } from '../src/lib/server/mailer.ts';
 import { PostgresActivityStore } from '../src/lib/server/activity-store.ts';
 import { canonicalPublicOrigin } from '../src/lib/server/origin.ts';
 import { RATE_LIMITS } from '../src/lib/server/rate-limit.ts';
@@ -135,6 +135,14 @@ async function main() {
 		assert.equal(slides[1].compare?.rightTitle, 'Neu');
 		assert.equal(slides[2].timeline?.length, 2);
 		ok('Blocktypen number/compare/timeline + Reveal werden geparst');
+	}
+
+	// 8a) Unicode-Zeilentrenner bleiben innerhalb von Direktiven-Werten erhalten
+	{
+		for (const eyebrow of ['a\u2028b', 'a\u2029b']) {
+			assert.equal(parseDeck(`eyebrow: ${eyebrow}\n# Unicode`)[0].eyebrow, eyebrow);
+		}
+		ok('Direktiven behalten U+2028/U+2029 im Wert');
 	}
 
 	// 8b) Timeline-Labels dürfen Doppelpunkte und Bindestriche enthalten
@@ -317,6 +325,12 @@ async function main() {
 		assert.ok(clarifiedSlides.every((slide) => slide.headline.length <= 68));
 		assert.ok(clarifiedSlides.every((slide) => !slide.body || slide.body.length <= 110));
 		assert.equal(clarifiedSlides[0].speakerNotes, 'Presenter-Kontext 1');
+		const clarifiedTextImage = parseDeck(localClarify(
+			'Inline image',
+			'type: text\n# Inline image\n![Inline](https://cdn.example.test/inline.png)'
+		).source)[0];
+		assert.equal(clarifiedTextImage.kind ?? 'text', 'text');
+		assert.equal(clarifiedTextImage.image, 'https://cdn.example.test/inline.png');
 		assert.equal(sniffImage(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0])), 'image/png');
 		const imageSlide = parseDeck('type: image\n# Lesbarer Overlay\n![Cover](https://cdn.example.test/cover.png)')[0];
 		const denseSlide = parseDeck(`# ${'Sehr lange Headline '.repeat(8)}\n${'Sehr langer Body für kleine Telefone. '.repeat(16)}`)[0];
@@ -1156,8 +1170,17 @@ Kurz.`;
 		assert.equal(verifyUnsubToken(unsubToken.replace(/.$/, 'x'), 'secret'), null);
 		const outboxDir = '.data/verify-outbox';
 		await rm(outboxDir, { recursive: true, force: true });
-		await new OutboxEmailProvider(outboxDir, () => 'mail1').send({ to: 'test@example.com', subject: 'Verify', text: 'hello' });
-		assert.equal((await readOutbox(outboxDir))[0]?.subject, 'Verify');
+		const loginMessage = {
+			to: 'test@example.com',
+			subject: 'Login',
+			text: 'Login:\n\nhttp://localhost:3000/auth/verify?token=login-code'
+		};
+		const mailLogs: string[] = [];
+		await new OutboxEmailProvider(outboxDir, () => 'mail1', (line) => mailLogs.push(line)).send(loginMessage);
+		assert.equal((await readOutbox(outboxDir))[0]?.subject, 'Login');
+		assert.match(mailLogs[0] ?? '', /^=== LOGIN LINK === .* === LOGIN CODE === login-code ===$/);
+		assert.equal(devLoginLine(loginMessage, { NODE_ENV: 'production' }), null);
+		assert.equal(devLoginLine(loginMessage, { RAILWAY_ENVIRONMENT: 'production' }), null);
 		await rm(followPath, { force: true });
 		await rm(outboxDir, { recursive: true, force: true });
 		ok('Follow speichert/dedupt, Unsubscribe-Token und Mail-Outbox funktionieren');
