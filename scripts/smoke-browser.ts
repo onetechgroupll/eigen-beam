@@ -36,8 +36,8 @@ async function main() {
 		assert.ok(roomId, 'Presenter URL enthält Room-ID');
 		ok('Home CTA hydriert und navigiert zu Presenter-Room');
 
-		await page.getByText(/REMOTE CONTROL/i).waitFor({ timeout: 5_000 });
-		await page.getByRole('button', { name: /Join/i }).waitFor({ timeout: 5_000 });
+		await page.getByText(/REMOTE-STEUERUNG/i).waitFor({ timeout: 5_000 });
+		await page.getByRole('button', { name: /Beitreten|Join/i }).waitFor({ timeout: 5_000 });
 		await page.getByRole('button', { name: /Coach öffnen/i }).waitFor({ timeout: 5_000 });
 		ok('Presenter öffnet mobile-first als Remote-Control mit Join-Drawer');
 
@@ -80,7 +80,7 @@ async function main() {
 		await endDialog.getByText(/Alle Viewer wechseln sofort zum End-Screen/i).waitFor({ timeout: 5_000 });
 		const questionDownload = page.waitForEvent('download', { timeout: 10_000 });
 		await endDialog.getByRole('button', { name: /^Exportieren und beenden$/i }).click({ timeout: 10_000 });
-		assert.match((await questionDownload).suggestedFilename(), /-fragen\.md$/);
+		assert.match((await questionDownload).suggestedFilename(), /-questions\.md$/);
 		await page.getByRole('heading', { name: /^Session beendet\.$/i }).waitFor({ timeout: 5_000 });
 		await viewerPage.getByRole('link', { name: /Replay ansehen/i }).waitFor({ timeout: 5_000 });
 		ok('Session-Ende exportiert Fragen nach dem ACK und schaltet Presenter/Viewer auf den Endzustand');
@@ -105,35 +105,35 @@ async function main() {
 		await viewerPage.close();
 
 		await page.goto(`${BASE}/replay/${roomId}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-		await page.getByText(/NEXT BEST ACTION/i).waitFor({ timeout: 5_000 });
+		await page.getByText(/NÄCHSTE BESTE AKTION|NEXT BEST ACTION/i).waitFor({ timeout: 5_000 });
 		await page.getByRole('heading', { name: /Follow-up mailen/i }).waitFor({ timeout: 5_000 });
-		await page.getByLabel('Replay Command Center').getByRole('link', { name: /Follow-up mailen/i }).waitFor({ timeout: 5_000 });
+		await page.getByLabel('Replay-Steuerung').getByRole('link', { name: /Follow-up mailen/i }).waitFor({ timeout: 5_000 });
 		await page.getByRole('button', { name: /Session ansehen/i }).waitFor({ timeout: 5_000 });
 		await page.getByRole('button', { name: /Details öffnen/i }).waitFor({ timeout: 5_000 });
 		ok('Replay startet als action-first Command Center');
 
 		await page.goto(`${BASE}/new`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-		await page.getByText(/FAST PATH/i).waitFor({ timeout: 5_000 });
-		await page.getByText(/GUIDED COMPOSER/i).waitFor({ timeout: 5_000 });
+		await page.getByText(/SCHNELLSTART/i).waitFor({ timeout: 5_000 });
+		await page.getByText(/GEFÜHRTER EDITOR/i).waitFor({ timeout: 5_000 });
 		await page.getByText(/1 Material/i).waitFor({ timeout: 5_000 });
-		await page.getByText(/IMPORT STUDIO/i).waitFor({ timeout: 5_000 });
-		await page.getByText('READY CHECK', { exact: true }).waitFor({ timeout: 5_000 });
+		await page.getByText(/IMPORT-STUDIO/i).waitFor({ timeout: 5_000 });
+		await page.getByText(/^ready check$/i).waitFor({ timeout: 5_000 });
 		await page.getByLabel('Ready Check').getByText(/Live-ready:/i).waitFor({ timeout: 5_000 });
 		await page.getByText(/Mobile Format vorbereitet/i).waitFor({ timeout: 5_000 });
 		await page.getByRole('button', { name: /6 Folien live starten/i }).waitFor({ timeout: 5_000 });
 		await page.getByText(/Import läuft|Import bereit/i).waitFor({ timeout: 5_000 });
-		await page.getByLabel('Import Studio').getByRole('button', { name: /Advanced/i }).waitFor({ timeout: 5_000 });
+		await page.getByLabel(/^import.?studio$/i).getByRole('button', { name: /Advanced/i }).waitFor({ timeout: 5_000 });
 		await page.getByRole('button', { name: /CTA ergänzen/i }).waitFor({ timeout: 5_000 });
 		const beforeImportFailures = consoleFailures.length;
 		await page.setInputFiles('input[type="file"][accept*=".pdf"]', { name: 'broken.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%% broken') });
-		await page.getByText(/Import Fehler/i).waitFor({ timeout: 10_000 });
+		await page.getByText(/Import-Fehler|Import Fehler|Import fehlgeschlagen/i).waitFor({ timeout: 10_000 });
 		const expectedImportFailures = consoleFailures.slice(beforeImportFailures);
 		if (expectedImportFailures.every((failure) => /Failed to load resource: the server responded with a status of (401|422)/i.test(failure.text))) {
 			consoleFailures.splice(beforeImportFailures);
 		}
 		await page.getByRole('button', { name: /Live starten/i }).click({ timeout: 10_000 });
 		await page.waitForURL(/\/present\/[^/]+$/, { timeout: 20_000 });
-		await page.getByText(/REMOTE CONTROL/i).waitFor({ timeout: 5_000 });
+		await page.getByText(/REMOTE-STEUERUNG/i).waitFor({ timeout: 5_000 });
 		ok('Authoring startet mit Import-Studio, Raw-Markdown hinter Advanced und direktem Live-Start');
 
 		await page.goto(`${BASE}/account`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
@@ -141,18 +141,32 @@ async function main() {
 		await page.getByRole('button', { name: /Library öffnen/i }).click({ timeout: 10_000 });
 		await page.waitForFunction(() => location.hash === '#library-remote', undefined, { timeout: 5_000 });
 		await page.locator('#library-remote:focus').waitFor({ timeout: 5_000 });
-		await page.getByText(/LIBRARY REMOTE/i).waitFor({ timeout: 5_000 });
+		await page.getByText(/BIBLIOTHEKS-REMOTE/i).waitFor({ timeout: 5_000 });
 		await page.getByRole('button', { name: /Library sichern/i }).waitFor({ timeout: 5_000 });
-		await page.getByRole('link', { name: /Import Deck/i }).waitFor({ timeout: 5_000 });
+		await page.getByRole('link', { name: /Deck importieren/i }).waitFor({ timeout: 5_000 });
 		await page.getByRole('button', { name: /^Live starten/i }).first().click({ timeout: 10_000 });
 		await page.waitForURL(/\/present\/[^/]+$/, { timeout: 20_000 });
-		await page.getByText(/REMOTE CONTROL/i).waitFor({ timeout: 5_000 });
+		await page.getByText(/REMOTE-STEUERUNG/i).waitFor({ timeout: 5_000 });
 		ok('Library zeigt mobile Remote-Cards und startet gespeichertes Deck direkt live');
 
 		await expectNoConsoleFailures(consoleFailures);
 		ok('Presenter-UI ist interaktiv und ohne Console-Errors');
 
 		await context.close();
+
+		const englishContext = await browser.newContext({ ...device, colorScheme: 'light', locale: 'en-US' });
+		const englishPage = await englishContext.newPage();
+		await englishPage.goto(`${BASE}/`, { waitUntil: 'networkidle', timeout: 45_000 });
+		assert.equal(await englishPage.locator('html').getAttribute('lang'), 'en');
+		await englishPage.getByRole('heading', { name: /Present live on every phone/i }).waitFor({ timeout: 5_000 });
+		await englishPage.goto(`${BASE}/v/${roomId}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+		await englishPage.getByRole('heading', { name: /^Presentation ended\.$/i }).waitFor({ timeout: 5_000 });
+		await englishPage.getByRole('button', { name: /^Deutsch$/i }).click({ timeout: 10_000 });
+		assert.equal(await englishPage.locator('html').getAttribute('lang'), 'de');
+		await englishPage.reload({ waitUntil: 'domcontentloaded', timeout: 45_000 });
+		await englishPage.getByRole('heading', { name: /^Präsentation beendet\.$/i }).waitFor({ timeout: 5_000 });
+		ok('EN-Browser erhält englische Viewer-UI; Sprachschalter persistiert DE per Cookie');
+		await englishContext.close();
 	} finally {
 		await browser.close();
 	}
