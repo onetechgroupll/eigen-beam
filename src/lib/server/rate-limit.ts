@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { t, type Locale } from '$lib/i18n';
 
 export type RateLimitPolicy = {
 	windowMs: number;
@@ -25,7 +26,7 @@ export const RATE_LIMITS = {
 	stats: { windowMs: 60 * 1000, max: 60 }
 } satisfies Record<string, RateLimitPolicy>;
 
-export function rateLimit(key: string, policy: RateLimitPolicy): Response | null {
+export function rateLimit(key: string, policy: RateLimitPolicy, locale: Locale = 'en'): Response | null {
 	const now = Date.now();
 	if (buckets.size > MAX_BUCKETS) sweep(now);
 	const current = buckets.get(key);
@@ -37,7 +38,7 @@ export function rateLimit(key: string, policy: RateLimitPolicy): Response | null
 	if (current.count <= policy.max) return null;
 	const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
 	return json(
-		{ error: true, message: 'Zu viele Anfragen. Bitte kurz warten.' },
+		{ error: true, code: 'too_many_requests', message: t(locale, 'api.too_many_requests') },
 		{ status: 429, headers: { 'retry-after': String(retryAfter) } }
 	);
 }

@@ -1,5 +1,6 @@
 import type { PublicSlide } from './decks';
 import type { ReplayEvent, ReplaySnapshot, RoomStats } from './server/rooms';
+import { detectContentLocale, type Locale } from './i18n';
 
 export type SessionSummarySlide = {
 	index: number;
@@ -29,45 +30,48 @@ export type SessionSummary = {
 };
 
 export function buildSessionSummary(replay: ReplaySnapshot, now = Date.now()): SessionSummary {
+	const locale = detectContentLocale(replay.slides);
 	const durationMinutes = sessionDurationMinutes(replay, now);
 	const engagements = replay.stats.reactions + replay.stats.questions + replay.stats.bookmarks;
 	const reopenRate = replay.stats.joins > 0 ? Math.round((replay.stats.reopens / replay.stats.joins) * 100) : 0;
 	const topSlides = slideSummaries(replay.slides as PublicSlide[], replay.events).filter((slide) => slide.score > 0).slice(0, 5);
 	const questionsBySlide = questionGroups(replay.slides as PublicSlide[], replay.events);
 	const whatLanded = topSlides.length
-		? topSlides.slice(0, 3).map((slide) => `${slide.label} „${slide.headline}“ hatte die stärkste Resonanz (${signalText(slide)}).`)
-		: ['Noch keine klaren Resonanz-Signale — beim nächsten Test bewusst Reaktionen/Merker beobachten.'];
+		? topSlides.slice(0, 3).map((slide) => locale === 'de' ? `${slide.label} „${slide.headline}“ hatte die stärkste Resonanz (${signalText(slide, locale)}).` : `${slide.label} “${slide.headline}” had the strongest response (${signalText(slide, locale)}).`)
+		: [locale === 'de' ? 'Noch keine klaren Resonanz-Signale — beim nächsten Test bewusst Reaktionen/Merker beobachten.' : 'No clear response signals yet — watch reactions and saves deliberately in the next test.'];
 	const clarifyNext = questionsBySlide.length
-		? questionsBySlide.slice(0, 3).map((group) => `${group.label} „${group.headline}“ bekam ${group.count} Frage${group.count === 1 ? '' : 'n'} — dort beim nächsten Mal früher Kontext geben.`)
-		: ['Keine Fragen im Rückkanal — die Story war entweder klar oder der Raum hat noch nicht aktiv gefragt.'];
+		? questionsBySlide.slice(0, 3).map((group) => locale === 'de' ? `${group.label} „${group.headline}“ bekam ${group.count} Frage${group.count === 1 ? '' : 'n'} — dort beim nächsten Mal früher Kontext geben.` : `${group.label} “${group.headline}” received ${group.count} question${group.count === 1 ? '' : 's'} — add context earlier next time.`)
+		: [locale === 'de' ? 'Keine Fragen im Rückkanal — die Story war entweder klar oder der Raum hat noch nicht aktiv gefragt.' : 'No audience questions — the story was either clear or the room did not ask actively yet.'];
 	const totals = { ...replay.stats, durationMinutes, engagements, reopenRate };
 	const summaryWithoutMarkdown = { id: replay.id, totals, topSlides, questionsBySlide, whatLanded, clarifyNext };
-	return { ...summaryWithoutMarkdown, markdown: sessionSummaryMarkdown(summaryWithoutMarkdown) };
+	return { ...summaryWithoutMarkdown, markdown: sessionSummaryMarkdown(summaryWithoutMarkdown, locale) };
 }
 
-export function sessionSummaryMarkdown(summary: Omit<SessionSummary, 'markdown'>): string {
+
+export function sessionSummaryMarkdown(summary: Omit<SessionSummary, 'markdown'>, locale: Locale = 'de'): string {
+	const de = locale === 'de';
 	const lines = [
-		'# Session Summary',
+		de ? '# Session-Zusammenfassung' : '# Session Summary',
 		'',
-		`Room: ${summary.id}`,
-		`Dauer: ${summary.totals.durationMinutes} min`,
+		`${de ? 'Raum' : 'Room'}: ${summary.id}`,
+		`${de ? 'Dauer' : 'Duration'}: ${summary.totals.durationMinutes} min`,
 		`Joins: ${summary.totals.joins} · Peak: ${summary.totals.peakConcurrent} · Re-Opens: ${summary.totals.reopens} (${summary.totals.reopenRate}%)`,
-		`Signale: ${summary.totals.engagements} · Reaktionen: ${summary.totals.reactions} · Fragen: ${summary.totals.questions} · Merker: ${summary.totals.bookmarks}`,
+		`${de ? 'Signale' : 'Signals'}: ${summary.totals.engagements} · ${de ? 'Reaktionen' : 'Reactions'}: ${summary.totals.reactions} · ${de ? 'Fragen' : 'Questions'}: ${summary.totals.questions} · ${de ? 'Merker' : 'Saves'}: ${summary.totals.bookmarks}`,
 		'',
-		'## Was gelandet ist'
+		de ? '## Was gelandet ist' : '## What landed'
 	];
 	for (const line of summary.whatLanded) lines.push(`- ${line}`);
-	lines.push('', '## Was du nächstes Mal klären solltest');
+	lines.push('', de ? '## Was du nächstes Mal klären solltest' : '## What to clarify next time');
 	for (const line of summary.clarifyNext) lines.push(`- ${line}`);
-	lines.push('', '## Top-Folien');
+	lines.push('', de ? '## Top-Folien' : '## Top slides');
 	if (summary.topSlides.length === 0) {
-		lines.push('- Noch keine Top-Folie mit Signalen.');
+		lines.push(de ? '- Noch keine Top-Folie mit Signalen.' : '- No top slide with signals yet.');
 	} else {
-		for (const slide of summary.topSlides) lines.push(`- ${slide.label} „${slide.headline}“ — Score ${slide.score} (${signalText(slide)})`);
+		for (const slide of summary.topSlides) lines.push(`- ${slide.label} “${slide.headline}” — Score ${slide.score} (${signalText(slide, locale)})`);
 	}
 	if (summary.questionsBySlide.length) {
-		lines.push('', '## Fragen nach Folie');
-		for (const group of summary.questionsBySlide) lines.push(`- ${group.label} „${group.headline}“ — ${group.count} Frage${group.count === 1 ? '' : 'n'}`);
+		lines.push('', de ? '## Fragen nach Folie' : '## Questions by slide');
+		for (const group of summary.questionsBySlide) lines.push(`- ${group.label} “${group.headline}” — ${group.count} ${de ? `Frage${group.count === 1 ? '' : 'n'}` : `question${group.count === 1 ? '' : 's'}`}`);
 	}
 	return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`;
 }
@@ -105,10 +109,11 @@ function sessionDurationMinutes(replay: ReplaySnapshot, now: number): number {
 	return Math.max(0, Math.round((end - start) / 60_000));
 }
 
-function signalText(slide: Pick<SessionSummarySlide, 'reactions' | 'questions' | 'bookmarks'>): string {
+function signalText(slide: Pick<SessionSummarySlide, 'reactions' | 'questions' | 'bookmarks'>, locale: Locale): string {
+	const de = locale === 'de';
 	return [
-		slide.reactions ? `${slide.reactions}× Reaktion` : '',
-		slide.questions ? `${slide.questions}× Frage` : '',
-		slide.bookmarks ? `${slide.bookmarks}× Merker` : ''
-	].filter(Boolean).join(' · ') || 'keine Einzelsignale';
+		slide.reactions ? `${slide.reactions}× ${de ? 'Reaktion' : 'reaction'}` : '',
+		slide.questions ? `${slide.questions}× ${de ? 'Frage' : 'question'}` : '',
+		slide.bookmarks ? `${slide.bookmarks}× ${de ? 'Merker' : 'save'}` : ''
+	].filter(Boolean).join(' · ') || (de ? 'keine Einzelsignale' : 'no individual signals');
 }

@@ -43,6 +43,11 @@ import { MCP_DECK_AUTHORING_GUIDANCE, deckEditUrl, mcpImageFileFromBase64, toMcp
 import { isMcpBearerAuthorized, mcpAuthContextFromHeader, mcpBearerTokensFromEnv, mcpHasScopes } from '../src/lib/server/mcp-auth.ts';
 import { mcpProtectedResourceMetadata, mcpUnauthorizedHeaders } from '../src/lib/server/mcp-oauth.ts';
 import { createOAuthAccessToken, oauthAuthorizationServerMetadata, parseOAuthClients, requestedOAuthScopes, verifyOAuthAccessToken } from '../src/lib/server/oauth-server.ts';
+import { detectContentLocale, resolveLocale } from '../src/lib/i18n/index.ts';
+import { apiErrorPayload, API_ERROR_CODES } from '../src/lib/api-errors.ts';
+import { catalogs } from '../src/lib/i18n/catalogs.ts';
+import { germanCatalogValueErrors } from './check-i18n.ts';
+import { safeLocalRedirectPath } from '../src/lib/server/safe-redirect.ts';
 
 let passed = 0;
 function ok(name: string) {
@@ -57,6 +62,53 @@ function pngDimensions(bytes: Buffer): { width: number; height: number } {
 }
 
 async function main() {
+	console.log('i18n:');
+	{
+		assert.equal(resolveLocale({ cookie: 'de', acceptLanguage: 'en-US', defaultLocale: 'en' }), 'de');
+		assert.equal(resolveLocale({ cookie: 'fr', acceptLanguage: 'de-DE,de;q=0.9,en;q=0.8', defaultLocale: 'en' }), 'de');
+		assert.equal(resolveLocale({ acceptLanguage: 'fr-FR,es;q=0.8', defaultLocale: 'de' }), 'de');
+		assert.equal(resolveLocale({ acceptLanguage: 'de;q=0,en;q=0', defaultLocale: 'de' }), 'de');
+		assert.equal(resolveLocale({ acceptLanguage: null, defaultLocale: 'de' }), 'de');
+		assert.equal(resolveLocale({ acceptLanguage: null, defaultLocale: 'fr' }), 'en');
+		ok('Locale-Auflösung priorisiert Cookie, positive Browser-Präferenzen und Env; q=0 wird ausgeschlossen');
+
+		assert.equal(detectContentLocale('Umsatz steigt / Kosten sinken', 'en'), 'de');
+		assert.equal(detectContentLocale('Größe', 'en'), 'de');
+		assert.equal(detectContentLocale('Your revenue is up and costs are down', 'de'), 'en');
+		const previousDefaultLocale = process.env.EB_DEFAULT_LOCALE;
+		process.env.EB_DEFAULT_LOCALE = 'de';
+		try {
+			assert.equal(detectContentLocale('Roadmap'), 'de');
+		} finally {
+			if (previousDefaultLocale === undefined) delete process.env.EB_DEFAULT_LOCALE;
+			else process.env.EB_DEFAULT_LOCALE = previousDefaultLocale;
+		}
+		ok('Content-Locale erkennt kurze deutsche Decks und nutzt bei geringer Konfidenz den konfigurierten Default');
+
+		const wrongEnglishCatalog = germanCatalogValueErrors({ safe: 'Save deck', wrong: 'Bitte speichern' });
+		assert.equal(wrongEnglishCatalog.length, 1);
+		assert.match(wrongEnglishCatalog[0] ?? '', /"wrong"/);
+		ok('i18n-Guard meldet deutsche Indikator-Wörter im englischen Katalog');
+
+		assert.equal(safeLocalRedirectPath('/account?tab=decks'), '/account?tab=decks');
+		for (const unsafe of ['https://evil.example', '//evil.example', '/\\evil.example', '/foo\\\\bar', '/account\nset-cookie:x']) {
+			assert.equal(safeLocalRedirectPath(unsafe), '/');
+		}
+		ok('Locale-Redirect akzeptiert nur lokale Pfade ohne Backslashes oder Steuerzeichen');
+
+		assert.equal(Object.keys(catalogs.de).length, Object.keys(catalogs.en).length);
+		assert.match(DECK_TEMPLATE, /Your first slide/);
+		assert.doesNotMatch(DECK_TEMPLATE, /Deine erste Folie/);
+		ok('EN/DE-Kataloge sind vollständig und das Standard-Demo-Deck ist Englisch');
+
+		for (const [code, status] of [['room_ended', 410], ['presenter_forbidden', 403], ['deck_not_found', 404]] as const) {
+			assert.ok(API_ERROR_CODES.includes(code));
+			assert.equal(status >= 400, true);
+			assert.deepEqual(apiErrorPayload('en', code), { error: true, code, message: catalogs.en[`api.${code}`] });
+		}
+		ok('API-Fehler für 410/403/404 tragen stabile Codes und lokalisierte Messages');
+	}
+
 	console.log('parseDeck:');
 
 	// 1) --- trennt Folien; Eyebrow/Headline/Body-Mapping
@@ -1063,7 +1115,7 @@ Kurz.`;
 		assert.match(summary.whatLanded[0] ?? '', /R2/);
 		assert.match(summary.clarifyNext[0] ?? '', /F2/);
 		assert.match(summary.markdown, /# Session Summary/);
-		assert.match(summary.markdown, /Top-Folien/);
+		assert.match(summary.markdown, /Top slides/);
 		assert.equal(summary.markdown.includes('Geheime Frage'), false);
 		assert.equal(summary.markdown.includes('speakerNotes'), false);
 		ok('Presenter Session Summary verdichtet Replay public-safe');
@@ -1071,12 +1123,12 @@ Kurz.`;
 		const followUpPack = buildFollowUpPack(replay, { baseUrl: 'https://eigen.beam' });
 		assert.equal(followUpPack.id, replay.id);
 		assert.match(followUpPack.subject, /Follow-up/);
-		assert.match(followUpPack.emailBody, /Replay ansehen/);
+		assert.match(followUpPack.emailBody, /View replay/);
 		assert.match(followUpPack.emailBody, /https:\/\/eigen\.beam\/replay\//);
-		assert.match(followUpPack.chatText, /Kurzfassung/);
+		assert.match(followUpPack.chatText, /Session summary/);
 		assert.equal(followUpPack.markdown.includes('Geheime Frage'), false);
 		assert.equal(followUpPack.markdown.includes('speakerNotes'), false);
-		assert.deepEqual(followUpPack.links.map((link) => link.label), ['Replay ansehen', 'Summary laden', 'Takeaway laden']);
+		assert.deepEqual(followUpPack.links.map((link) => link.label), ['View replay', 'Download summary', 'Download takeaway']);
 		ok('One-Tap Follow-up Pack erzeugt public-safe Mail/Chat/Links');
 
 		const heatmap = buildSlideHeatmap(replay);
@@ -1085,7 +1137,7 @@ Kurz.`;
 		assert.equal(heatmap.slides[0].intensity, 0);
 		assert.equal(heatmap.slides[1].intensity, 100);
 		assert.equal(heatmap.slides[1].classification, 'hot');
-		assert.equal(heatmap.slides[1].why.includes('Frage'), true);
+		assert.equal(heatmap.slides[1].why.includes('question'), true);
 		assert.equal(heatmap.slides[1].why.includes('Geheime Frage'), false);
 		assert.match(heatmap.markdown, /# Slide Heatmap/);
 		assert.equal(heatmap.markdown.includes('speakerNotes'), false);
@@ -1095,7 +1147,7 @@ Kurz.`;
 		assert.equal(deckV2.id, replay.id);
 		assert.match(deckV2.title, /V2/);
 		assert.ok(deckV2.source.includes('# R2'), 'Deck V2 behält starke Folie');
-		assert.match(deckV2.source, /Was wir früher klären sollten/);
+		assert.match(deckV2.source, /What to clarify earlier/);
 		assert.match(deckV2.source, /F2/);
 		assert.equal(deckV2.source.includes('Geheime Frage'), false);
 		assert.equal(deckV2.source.includes('speakerNotes'), false);
@@ -1114,6 +1166,12 @@ Kurz.`;
 		assert.equal(coach.markdown.includes('Geheime Frage'), false);
 		assert.equal(coach.markdown.includes('speakerNotes'), false);
 		ok('Session Coach erzeugt public-safe Next-Talk-Checklist');
+
+		const germanReplay = { ...replay, slides: parseDeck('# Umsatz steigt\nKosten sinken') };
+		assert.match(buildSessionSummary(germanReplay).markdown, /# Session-Zusammenfassung[\s\S]*Raum:/);
+		assert.match(buildFollowUpPack(germanReplay).markdown, /# Follow-up-Paket[\s\S]*Raum:/);
+		assert.match(buildSessionCoach(germanReplay).markdown, /# Session-Coach[\s\S]*Checkliste für den nächsten Talk/);
+		ok('Deutsche Decks lokalisieren auch Summary-, Follow-up- und Coach-Rahmentexte');
 
 		const dashboard = liveStatsDashboard({ joins: 6, currentViewers: 4, peakConcurrent: 5, reopens: 2, reactions: 3, questions: 1, bookmarks: 2, startedAt: 1_000 }, 61_000);
 		assert.equal(dashboard.durationMinutes, 1);

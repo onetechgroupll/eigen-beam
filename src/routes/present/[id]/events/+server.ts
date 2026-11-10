@@ -1,12 +1,13 @@
 import type { RequestHandler } from './$types';
 import { getRoom, subscribePresenter } from '$lib/server/rooms';
+import { requestText } from '$lib/server/locale';
 
-export const GET: RequestHandler = ({ params, cookies }) => {
+export const GET: RequestHandler = ({ params, cookies, locals }) => {
 	const room = getRoom(params.id);
-	if (!room) return new Response('Room nicht gefunden', { status: 404 });
-	if (room.ended) return new Response('Session beendet', { status: 410 });
+	if (!room) return new Response(requestText({ locals }, 'api.room_not_found'), { status: 404 });
+	if (room.ended) return new Response(requestText({ locals }, 'api.room_ended'), { status: 410 });
 	const token = cookies.get(`eb_pt_${params.id}`) ?? '';
-	if (token !== room.presenterToken) return new Response('Kein Presenter-Zugriff', { status: 403 });
+	if (token !== room.presenterToken) return new Response(requestText({ locals }, 'api.presenter_forbidden'), { status: 403 });
 	let unsub: (() => void) | null = null;
 	let heartbeat: ReturnType<typeof setInterval> | null = null;
 	let cleanup = () => {};

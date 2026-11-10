@@ -1,10 +1,11 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import QRCode from 'qrcode';
 	import SlideView from '$lib/components/SlideView.svelte';
 	import { applySentimentSignal, liveSentimentLabel, pacingHint, reopenInsight, replaySentiment, type SentimentPoint } from '$lib/polish';
 	import { presenterFeedItem, type PresenterFeedItem } from '$lib/presenter-feed';
 	import { fieldTestChecklist, liveStatsDashboard } from '$lib/stats-dashboard';
+	import { useI18n } from '$lib/i18n/context';
 
 	let { data } = $props();
 	const initial = <T>(read: () => T): T => read();
@@ -26,13 +27,19 @@
 	let endedAt = $state<number | null>(initial(() => data.endedAt));
 	let alreadyEnded = $state(false);
 	let questionsExported = $state(false);
+	let joinDialog: HTMLDialogElement | undefined = $state();
+	let endDialog: HTMLDialogElement | undefined = $state();
+	let joinTrigger: HTMLButtonElement | undefined = $state();
+	let sessionTrigger: HTMLButtonElement | undefined = $state();
+	let endTrigger: HTMLElement | undefined = $state();
+	const { locale, t } = useI18n();
 	const total = initial(() => data.slides.length);
 	let slide = $derived(data.slides[current]);
-	let pacing = $derived(pacingHint(slide));
-	let sentiment = $derived(liveSentimentLabel(sentimentPoints));
-	let reopen = $derived(reopenInsight(stats));
-	let dashboard = $derived(liveStatsDashboard(stats));
-	let checklist = $derived(fieldTestChecklist(stats, viewerUrl));
+	let pacing = $derived(pacingHint(slide, locale));
+	let sentiment = $derived(liveSentimentLabel(sentimentPoints, locale));
+	let reopen = $derived(reopenInsight(stats, locale));
+	let dashboard = $derived(liveStatsDashboard(stats, Date.now(), locale));
+	let checklist = $derived(fieldTestChecklist(stats, viewerUrl, locale));
 	let questionCount = $derived(Math.max(stats.questions, questions.length));
 	let durationMinutes = $derived(Math.max(0, Math.round(((endedAt ?? Date.now()) - stats.startedAt) / 60_000)));
 
@@ -52,10 +59,46 @@
 		sentimentPoints = applySentimentSignal(sentimentPoints, slideIndex, type);
 	}
 	function requestEnd() {
+		const active = document.activeElement;
+		endTrigger = active instanceof HTMLElement && document.contains(active) ? active : undefined;
 		endError = '';
 		showSession = false;
 		showEndDialog = true;
 	}
+	function closeEndDialog() {
+		if (endDialog?.open) endDialog.close();
+		else handleEndDialogClosed();
+	}
+	async function handleEndDialogClosed() {
+		showEndDialog = false;
+		endError = '';
+		await tick();
+		const target = connected(endTrigger)
+			? endTrigger
+			: connected(sessionTrigger)
+				? sessionTrigger
+				: document.querySelector<HTMLElement>('.end-links a, .end-links button, .remote-controls button:not([disabled])');
+		target?.focus();
+	}
+	function connected(element: HTMLElement | undefined): element is HTMLElement {
+		return Boolean(element && document.contains(element));
+	}
+	function openJoin(trigger: HTMLButtonElement) {
+		joinTrigger = trigger;
+		showJoin = true;
+		void tick().then(() => joinDialog?.showModal());
+	}
+	function closeJoin() {
+		if (joinDialog?.open) joinDialog.close();
+		else handleJoinClosed();
+	}
+	function handleJoinClosed() {
+		showJoin = false;
+		joinTrigger?.focus();
+	}
+	$effect(() => {
+		if (showEndDialog) void tick().then(() => { if (!endDialog?.open) endDialog?.showModal(); });
+	});
 	function closePresenterStream() {
 		presenterEvents?.close();
 		presenterEvents = null;
@@ -82,12 +125,16 @@
 				endedAt = typeof result.endedAt === 'number' && Number.isFinite(result.endedAt) ? result.endedAt : (endedAt ?? Date.now());
 				ended = true;
 				showEndDialog = false;
-				if (exportAfterEnd) downloadQuestions();
+					if (exportAfterEnd) downloadQuestions();
+					else {
+						await tick();
+						document.querySelector<HTMLElement>('.end-links a, .end-links button')?.focus();
+					}
 				return;
 			}
-			endError = 'Session konnte nicht beendet werden. Bitte erneut versuchen.';
+			endError = t('present.end_failed');
 		} catch {
-			endError = 'Keine Verbindung. Die Session läuft weiter. Bitte erneut versuchen.';
+			endError = t('present.end_offline');
 		} finally {
 			ending = false;
 		}
@@ -112,9 +159,9 @@
 		window.addEventListener('keydown', key);
 		presenterEvents = new EventSource(`/present/${data.id}/events`);
 		presenterEvents.addEventListener('stats', (e) => { const j = JSON.parse((e as MessageEvent).data); stats = { ...j.stats, questions: Math.max(j.stats.questions, questions.length) }; });
-		presenterEvents.addEventListener('reaction', (e) => { const j = JSON.parse((e as MessageEvent).data); signal(j.slide, 'reaction'); push(presenterFeedItem({ type: 'reaction', reaction: j.reaction, slide: j.slide, ts: j.ts })); });
-		presenterEvents.addEventListener('question', (e) => { const j = JSON.parse((e as MessageEvent).data); questions = [...questions, { text: j.text, slide: j.slide, ts: j.ts }]; stats = { ...stats, questions: questions.length }; signal(j.slide, 'question'); push(presenterFeedItem({ type: 'question', text: j.text, slide: j.slide, ts: j.ts })); });
-		presenterEvents.addEventListener('bookmark', (e) => { const j = JSON.parse((e as MessageEvent).data); signal(j.slide, 'bookmark'); push(presenterFeedItem({ type: 'bookmark', slide: j.slide, ts: j.ts })); });
+		presenterEvents.addEventListener('reaction', (e) => { const j = JSON.parse((e as MessageEvent).data); signal(j.slide, 'reaction'); push(presenterFeedItem({ type: 'reaction', reaction: j.reaction, slide: j.slide, ts: j.ts }, locale)); });
+		presenterEvents.addEventListener('question', (e) => { const j = JSON.parse((e as MessageEvent).data); questions = [...questions, { text: j.text, slide: j.slide, ts: j.ts }]; stats = { ...stats, questions: questions.length }; signal(j.slide, 'question'); push(presenterFeedItem({ type: 'question', text: j.text, slide: j.slide, ts: j.ts }, locale)); });
+		presenterEvents.addEventListener('bookmark', (e) => { const j = JSON.parse((e as MessageEvent).data); signal(j.slide, 'bookmark'); push(presenterFeedItem({ type: 'bookmark', slide: j.slide, ts: j.ts }, locale)); });
 		presenterEvents.addEventListener('ended', (e) => { const j = JSON.parse((e as MessageEvent).data); endedAt = j.ts; ended = true; showEndDialog = false; showSession = false; closePresenterStream(); });
 		return () => { window.removeEventListener('keydown', key); closePresenterStream(); };
 	});
@@ -122,89 +169,90 @@
 
 {#if ended}
 	<main class="end-state">
-		<section class="end-card" aria-label="Session beendet">
-			<span class="mono kicker">SESSION BEENDET</span>
-			<h1>{alreadyEnded ? 'Diese Session war bereits beendet.' : 'Session beendet.'}</h1>
-			<p>Alle Viewer sehen jetzt den End-Screen. Der Replay-Link bleibt bereit.</p>
+		<section class="end-card" aria-label={t('present.ended_label')}>
+			<span class="mono kicker">{t('present.ended_kicker')}</span>
+			<h1>{alreadyEnded ? t('present.ended_again') : t('present.ended_title')}</h1>
+			<p aria-live="polite">{t('present.ended_body')}</p>
 			<div class="end-stats">
-				<article><strong>{durationMinutes}</strong><span>Minuten</span></article>
-				<article><strong>{stats.peakConcurrent}</strong><span>Viewer-Peak</span></article>
-				<article><strong>{questionCount}</strong><span>Fragen</span></article>
+				<article><strong>{durationMinutes}</strong><span>{t('present.minutes')}</span></article>
+				<article><strong>{stats.peakConcurrent}</strong><span>{t('present.viewer_peak')}</span></article>
+				<article><strong>{questionCount}</strong><span>{t('common.questions')}</span></article>
 			</div>
 			<div class="end-links">
-				<a class="primary-link" href={`/replay/${data.id}`}>Replay ansehen →</a>
-				{#if questionCount > 0}<a class="secondary export-link" href={`/present/${data.id}/questions`}>Fragen exportieren</a>
-					<p class="export-hint">Verfügbar, solange die Aufbewahrung des Rooms läuft.</p>{/if}
-				<a class="secondary-link" href="/new">Neue Session</a>
+				<a class="primary-link" href={`/replay/${data.id}`}>{t('viewer.replay')} →</a>
+				{#if questionCount > 0}<a class="secondary export-link" href={`/present/${data.id}/questions`}>{t('present.export_questions')}</a>
+					<p class="export-hint">{t('present.export_window')}</p>{/if}
+				<a class="secondary-link" href="/new">{t('present.new_session')}</a>
 			</div>
 		</section>
 	</main>
 {:else}
 <main>
 	<header class="topbar">
-		<div><span class="mono kicker">REMOTE CONTROL</span><strong>{current + 1} / {total}</strong></div>
-		<nav><a href={`/present/${data.id}/stats`}>Stats</a><button onclick={() => (showJoin = !showJoin)}>Join</button><button aria-expanded={showSession} onclick={() => (showSession = !showSession)}>Session</button></nav>
+		<div><span class="mono kicker">{t('present.remote_control')}</span><strong>{current + 1} / {total}</strong></div>
+			<nav><a href={`/present/${data.id}/stats`}>{t('common.stats')}</a><button aria-haspopup="dialog" onclick={(e) => openJoin(e.currentTarget)}>{t('present.join')}</button><button bind:this={sessionTrigger} aria-expanded={showSession} onclick={() => (showSession = !showSession)}>{t('present.session')}</button></nav>
 	</header>
 	{#if showSession}
-		<section class="session-menu" aria-label="Session-Menü"><p>Steuerung für diese Live-Session.</p><button onclick={requestEnd}>Session beenden</button></section>
+		<section class="session-menu" aria-label={t('present.session_menu_label')}><p>{t('present.session_menu_body')}</p><button onclick={requestEnd}>{t('present.end_session')}</button></section>
 	{/if}
 
 	{#if showJoin}
-		<section class="join-sheet" aria-label="Join Drawer">
-			{#if qr}<img src={qr} alt="QR zum Beitreten" width="132" height="132" />{/if}
-			<div><span class="mono kicker">AUDIENCE LINK</span><p class="url">{viewerUrl}</p><p>QR kurz zeigen, Link in Chat werfen, dann wieder in die Remote zurück.</p></div>
-		</section>
+		<dialog bind:this={joinDialog} class="join-sheet" aria-label={t('present.join_label')} onclose={handleJoinClosed}>
+			<button class="sheet-close" onclick={closeJoin}>{t('present.join_close')}</button>
+			{#if qr}<img src={qr} alt={t('present.qr_alt')} width="132" height="132" />{/if}
+			<div><span class="mono kicker">{t('present.audience_link')}</span><p class="url">{viewerUrl}</p><p>{t('present.join_help')}</p></div>
+		</dialog>
 	{/if}
 
-	<section class="remote-stage" aria-label="Aktuelle Folie">
-		<div class="slide-meta"><span class="mono kicker">ON AIR</span><span>● {stats.currentViewers} live</span></div>
+	<section class="remote-stage" aria-label={t('present.current_slide')}>
+		<div class="slide-meta"><span class="mono kicker">{t('present.on_air')}</span><span>● {stats.currentViewers} {t('common.live')}</span></div>
 		<div class="mini-slide"><SlideView {slide} /></div>
-		<div class="slide-title"><span>Folie {current + 1} von {total} · {pacing.label}</span><h1>{slide?.headline}</h1></div>
+		<div class="slide-title"><span>{t('present.slide_of', { current: current + 1, total, pace: pacing.label })}</span><h1>{slide?.headline}</h1></div>
 	</section>
 
 	<section class="coach-card">
-		<button class="coach-toggle" aria-expanded={showCoach} onclick={() => (showCoach = !showCoach)}><span>{showCoach ? 'Coach schließen' : 'Coach öffnen'}</span><strong>{sentiment}</strong></button>
+		<button class="coach-toggle" aria-expanded={showCoach} onclick={() => (showCoach = !showCoach)}><span>{showCoach ? t('present.coach_close') : t('present.coach_open')}</span><strong>{sentiment}</strong></button>
 		{#if showCoach}
 			<div class="coach-body">
-				<section class="signal-strip" aria-label="Live Signale">
-					<article><strong>{stats.currentViewers}</strong><span>dabei</span></article>
-					<article><strong>{questionCount}</strong><span>Fragen</span></article>
-					<article><strong>{stats.bookmarks}</strong><span>Merker</span></article>
+				<section class="signal-strip" aria-label={t('present.live_signals')}>
+					<article><strong>{stats.currentViewers}</strong><span>{t('present.attending')}</span></article>
+					<article><strong>{questionCount}</strong><span>{t('common.questions')}</span></article>
+					<article><strong>{stats.bookmarks}</strong><span>{t('present.bookmarks')}</span></article>
 					<article class:hot={reopen.tone === 'hot'}><strong>{dashboard.reopenRate}%</strong><span>Re-Open</span></article>
 				</section>
-				<p><strong>{dashboard.engagementLabel}:</strong> Live-Signale bleiben im Coach, damit die Remote im Vortrag ruhig bleibt.</p>
+				<p><strong>{dashboard.engagementLabel}:</strong> {t('present.signals_help')}</p>
 				<p><strong>{reopen.label}:</strong> {reopen.detail}</p>
-				<div class="spark" aria-label="Sentiment-Kurve">{#each sentimentPoints as point}<span title={`Folie ${point.label}: ${point.score}`} style={`--h:${Math.max(8, Math.min(42, 18 + point.score * 6))}px`}></span>{/each}</div>
+				<div class="spark" aria-label={t('common.sentiment_chart')}>{#each sentimentPoints as point}<span title={`${t('common.slide')} ${point.label}: ${point.score}`} style={`--h:${Math.max(8, Math.min(42, 18 + point.score * 6))}px`}></span>{/each}</div>
 				<div class="checklist">{#each checklist as item}<article class={item.status}><strong>{item.label}</strong><p>{item.detail}</p></article>{/each}</div>
 			</div>
 		{/if}
 	</section>
 
-	{#if slide.speakerNotes}<section class="notes"><span class="mono kicker">NOTES</span><p>{slide.speakerNotes}</p></section>{/if}
-	{#if feed.length}<section class="feed" aria-label="Live-Feed">{#each feed as item}<p class={item.kind}><strong>{item.label}</strong><span>{item.text}</span></p>{/each}</section>{/if}
+	{#if slide.speakerNotes}<section class="notes"><span class="mono kicker">{t('present.notes')}</span><p>{slide.speakerNotes}</p></section>{/if}
+	{#if feed.length}<section class="feed" aria-label={t('present.live_feed')}>{#each feed as item}<p class={item.kind}><strong>{item.label}</strong><span>{item.text}</span></p>{/each}</section>{/if}
 
 	<footer class="remote-controls">
-		<button class="secondary" onclick={() => go(current - 1)} disabled={current === 0}>← Zurück</button>
-		{#if current === total - 1}<button class="primary" onclick={requestEnd}>Session beenden →</button>{:else}<button class="primary" onclick={() => go(current + 1)}>Weiter</button>{/if}
+		<button class="secondary" onclick={() => go(current - 1)} disabled={current === 0}>← {t('common.back')}</button>
+		{#if current === total - 1}<button class="primary" onclick={requestEnd}>{t('present.end_session')} →</button>{:else}<button class="primary" onclick={() => go(current + 1)}>{t('present.next')}</button>{/if}
 	</footer>
 	{#if showEndDialog}
-		<div class="dialog-backdrop" role="presentation">
-			<div class="end-dialog" role="dialog" aria-modal="true" aria-labelledby="end-title">
-				<span class="mono kicker">SESSION BEENDEN</span>
-				<h2 id="end-title">Session für alle beenden?</h2>
-				<p>Alle Viewer wechseln sofort zum End-Screen. Danach kannst du Replay und Fragen noch nutzen, solange der Room vorgehalten wird.</p>
+		<dialog bind:this={endDialog} class="dialog-backdrop" aria-labelledby="end-title" onclose={handleEndDialogClosed} oncancel={(e) => { if (ending) e.preventDefault(); }}>
+			<div class="end-dialog">
+				<span class="mono kicker">{t('present.end_session')}</span>
+				<h2 id="end-title">{t('present.end_confirm_title')}</h2>
+				<p>{t('present.end_confirm_body')}</p>
 				{#if endError}<p class="end-error" role="alert">{endError}</p>{/if}
 				<div class="dialog-actions">
 					{#if questionCount > 0 && !questionsExported}
-						<button class="dialog-primary" disabled={ending} onclick={() => endSession(true)}>{ending ? 'Beende …' : 'Exportieren und beenden'}</button>
-						<button disabled={ending} onclick={() => endSession(false)}>Ohne Export beenden</button>
+						<button class="dialog-primary" disabled={ending} onclick={() => endSession(true)}>{ending ? t('present.ending') : t('present.export_and_end')}</button>
+						<button disabled={ending} onclick={() => endSession(false)}>{t('present.end_without_export')}</button>
 					{:else}
-						<button class="dialog-primary" disabled={ending} onclick={() => endSession(false)}>{ending ? 'Beende …' : 'Session beenden'}</button>
+						<button class="dialog-primary" disabled={ending} onclick={() => endSession(false)}>{ending ? t('present.ending') : t('present.end_session')}</button>
 					{/if}
-					<button disabled={ending} onclick={() => { showEndDialog = false; endError = ''; }}>Abbrechen</button>
+					<button disabled={ending} onclick={closeEndDialog}>{t('common.cancel')}</button>
 				</div>
 			</div>
-		</div>
+		</dialog>
 	{/if}
 </main>
 {/if}
@@ -222,7 +270,10 @@
 	.session-menu { padding: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 	.session-menu p { color: var(--muted); font-size: 12px; }
 	.session-menu button { min-height: 44px; border: 1px solid var(--hair); border-radius: 999px; background: transparent; color: var(--fg); padding: 0 14px; font-weight: 760; }
-	.join-sheet { display: grid; grid-template-columns: 112px 1fr; gap: 14px; align-items: center; padding: 14px; }
+	.join-sheet { position:fixed; width:min(calc(100% - 24px),620px); inset:auto 12px 112px; margin:auto; grid-template-columns:112px 1fr; gap:14px; align-items:center; padding:14px; color:var(--fg); }
+	.join-sheet[open] { display:grid; }
+	.join-sheet::backdrop { background:color-mix(in srgb,#000 48%,transparent); }
+	.sheet-close { grid-column:1 / -1; justify-self:end; min-height:44px; border:1px solid var(--hair); border-radius:999px; padding:0 14px; background:var(--surface-2); color:var(--fg); font-weight:760; }
 	.join-sheet img { width: 112px; height: 112px; border-radius: 18px; background: #fff; padding: 7px; }
 	.join-sheet p { color: var(--muted); font-size: 12px; line-height: 1.4; }
 	.url { color: var(--fg) !important; font-size: 13px !important; font-weight: 800; word-break: break-all; margin: 4px 0; }
@@ -256,7 +307,9 @@
 	.remote-controls .secondary { background: color-mix(in srgb, var(--bg) 94%, var(--fg) 6%); backdrop-filter: blur(18px); }
 	.remote-controls .primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-size: 22px; }
 	.remote-controls button:disabled { opacity: .42; }
-	.dialog-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; align-items: end; background: color-mix(in srgb, #000 64%, transparent); padding: 12px; }
+	.dialog-backdrop { position: fixed; inset: 0; width:100%; height:100%; max-width:none; max-height:none; z-index: 100; border:0; background:transparent; padding:12px; color:var(--fg); }
+	.dialog-backdrop[open] { display:grid; align-items:end; }
+	.dialog-backdrop::backdrop { background: color-mix(in srgb, #000 64%, transparent); }
 	.end-dialog { width: min(100%, 620px); margin: 0 auto; border: 1px solid var(--hair); border-radius: 28px; background: var(--bg); padding: 20px; box-shadow: var(--shadow-soft); }
 	.end-dialog h2 { margin-top: 8px; font-size: clamp(26px, 8vw, 40px); line-height: 1; letter-spacing: -1px; }
 	.end-dialog p { margin-top: 12px; color: var(--muted); line-height: 1.5; }

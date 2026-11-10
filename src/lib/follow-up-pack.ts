@@ -1,5 +1,6 @@
 import type { ReplaySnapshot } from './server/rooms';
 import { buildSessionSummary, type SessionSummary } from './session-summary';
+import { detectContentLocale, type Locale } from './i18n';
 
 export type FollowUpPackLink = {
 	label: string;
@@ -21,6 +22,8 @@ export type FollowUpPackOptions = {
 };
 
 export function buildFollowUpPack(replay: ReplaySnapshot, options: FollowUpPackOptions = {}): FollowUpPack {
+	const locale = detectContentLocale(replay.slides);
+	const de = locale === 'de';
 	const baseUrl = normalizeBaseUrl(options.baseUrl ?? '');
 	const summary = options.summary ?? buildSessionSummary(replay);
 	const replayUrl = absoluteUrl(baseUrl, `/replay/${replay.id}`);
@@ -31,50 +34,51 @@ export function buildFollowUpPack(replay: ReplaySnapshot, options: FollowUpPackO
 	const landed = summary.whatLanded.slice(0, 2);
 	const clarify = summary.clarifyNext.slice(0, 2);
 	const emailLines = [
-		'Hi zusammen,',
+		de ? 'Hi zusammen,' : 'Hi everyone,',
 		'',
-		'danke für die Session. Hier ist die Kurzfassung mit Replay und den wichtigsten Signalen:',
+		de ? 'danke für die Session. Hier ist die Kurzfassung mit Replay und den wichtigsten Signalen:' : 'thanks for the session. Here is the short version with the replay and the most important signals:',
 		'',
-		`Replay ansehen: ${replayUrl}`,
-		`Summary laden: ${summaryUrl}`,
-		`Takeaway laden: ${takeawayUrl}`,
+		`${de ? 'Replay ansehen' : 'View replay'}: ${replayUrl}`,
+		`${de ? 'Summary laden' : 'Download summary'}: ${summaryUrl}`,
+		`${de ? 'Takeaway laden' : 'Download takeaway'}: ${takeawayUrl}`,
 		'',
-		'Was gelandet ist:',
+		de ? 'Was gelandet ist:' : 'What landed:',
 		...landed.map((line) => `- ${line}`),
 		'',
-		'Nächstes Mal / offene Punkte:',
+		de ? 'Nächstes Mal / offene Punkte:' : 'Next time / open points:',
 		...clarify.map((line) => `- ${line}`),
 		'',
-		strongest ? `Top-Folie: ${strongest.label} „${strongest.headline}“ (${strongest.score} Signale).` : 'Top-Folie: noch keine klaren Signale.',
+		strongest ? `${de ? 'Top-Folie' : 'Top slide'}: ${strongest.label} “${strongest.headline}” (${strongest.score} ${de ? 'Signale' : 'signals'}).` : (de ? 'Top-Folie: noch keine klaren Signale.' : 'Top slide: no clear signals yet.'),
 		'',
-		'Viele Grüße'
+		de ? 'Viele Grüße' : 'Best'
 	];
 	const chatText = [
-		`Kurzfassung zur Session: ${replayUrl}`,
-		strongest ? `Top-Folie: ${strongest.label} „${strongest.headline}“.` : '',
+		`${de ? 'Kurzfassung zur Session' : 'Session summary'}: ${replayUrl}`,
+		strongest ? `${de ? 'Top-Folie' : 'Top slide'}: ${strongest.label} “${strongest.headline}”.` : '',
 		`Summary: ${summaryUrl}`
 	].filter(Boolean).join('\n');
 	const links = [
-		{ label: 'Replay ansehen', href: replayUrl },
-		{ label: 'Summary laden', href: summaryUrl },
-		{ label: 'Takeaway laden', href: takeawayUrl }
+		{ label: de ? 'Replay ansehen' : 'View replay', href: replayUrl },
+		{ label: de ? 'Summary laden' : 'Download summary', href: summaryUrl },
+		{ label: de ? 'Takeaway laden' : 'Download takeaway', href: takeawayUrl }
 	];
-	const markdown = followUpPackMarkdown({ id: replay.id, subject, emailBody: emailLines.join('\n'), chatText, links });
+	const markdown = followUpPackMarkdown({ id: replay.id, subject, emailBody: emailLines.join('\n'), chatText, links }, locale);
 	return { id: replay.id, subject, emailBody: emailLines.join('\n'), chatText, links, markdown };
 }
 
-export function followUpPackMarkdown(pack: Omit<FollowUpPack, 'markdown'>): string {
+export function followUpPackMarkdown(pack: Omit<FollowUpPack, 'markdown'>, locale: Locale = 'de'): string {
+	const de = locale === 'de';
 	const lines = [
-		'# Follow-up Pack',
+		de ? '# Follow-up-Paket' : '# Follow-up Pack',
 		'',
-		`Room: ${pack.id}`,
-		`Subject: ${pack.subject}`,
+		`${de ? 'Raum' : 'Room'}: ${pack.id}`,
+		`${de ? 'Betreff' : 'Subject'}: ${pack.subject}`,
 		'',
-		'## Mail-Entwurf',
+		de ? '## Mail-Entwurf' : '## Email draft',
 		'',
 		pack.emailBody,
 		'',
-		'## Gruppenchat-Kurzfassung',
+		de ? '## Gruppenchat-Kurzfassung' : '## Group chat summary',
 		'',
 		pack.chatText,
 		'',

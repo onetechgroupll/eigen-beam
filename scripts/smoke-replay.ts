@@ -98,8 +98,8 @@ async function main() {
 	const statsPage = await fetch(`${BASE}/present/${id}/stats`, { headers: { cookie: `${ptName}=${presenterToken}` } });
 	assert.equal(statsPage.status, 200, 'Presenter-Stats-Dashboard → 200');
 	const statsHtml = await statsPage.text();
-	assert.match(statsHtml, /Field-Test/i);
-	assert.match(statsHtml, /Live-Kennzahlen|LIVE STATS/i);
+	assert.match(statsHtml, /Field.?Test/i);
+	assert.match(statsHtml, /Live-Kennzahlen|Live metrics|LIVE STATS/i);
 	ok('Presenter-Stats-Dashboard ist geschützt und rendert Field-Test-Signale');
 
 	// 4) Durable Replay über die API.
@@ -121,7 +121,7 @@ async function main() {
 	assert.equal(summaryMdRes.status, 200, 'GET /summary?format=md → 200');
 	const summaryMarkdown = await summaryMdRes.text();
 	assert.match(summaryMarkdown, /# Session Summary/);
-	assert.match(summaryMarkdown, /Top-Folien/);
+	assert.match(summaryMarkdown, /Top slides/);
 	assert.equal(summaryMarkdown.includes('Smoke secret question'), false, 'Markdown-Summary leakt keine Fragetexte');
 	ok('Presenter Session Summary liefert public-safe JSON + Markdown');
 
@@ -130,14 +130,14 @@ async function main() {
 	assert.equal(followupRes.status, 200, 'GET /api/replay/:id/followup → 200');
 	const { followUpPack } = (await followupRes.json()) as { followUpPack: { subject: string; emailBody: string; chatText: string; links: Array<{ label: string; href: string }>; markdown: string } };
 	assert.match(followUpPack.subject, /Follow-up/);
-	assert.match(followUpPack.emailBody, /Replay ansehen/);
+	assert.match(followUpPack.emailBody, /View replay/);
 	assert.ok(followUpPack.links.every((link) => link.href.startsWith(BASE)), 'Follow-up Links sind absolut');
 	assert.equal(followUpPack.markdown.includes('Smoke secret question'), false, 'Follow-up leakt keine Fragetexte');
 	const followupMdRes = await fetch(`${BASE}/api/replay/${id}/followup?format=md`);
 	assert.equal(followupMdRes.status, 200, 'GET /followup?format=md → 200');
 	const followupMarkdown = await followupMdRes.text();
 	assert.match(followupMarkdown, /# Follow-up Pack/);
-	assert.match(followupMarkdown, /Mail-Entwurf/);
+	assert.match(followupMarkdown, /Email draft/);
 	assert.equal(followupMarkdown.includes('Smoke secret question'), false, 'Follow-up Markdown leakt keine Fragetexte');
 	ok('One-Tap Follow-up Pack liefert public-safe Mail/Chat/Links');
 
@@ -163,16 +163,17 @@ async function main() {
 	const deckV2Res = await fetch(`${BASE}/api/replay/${id}/deck-v2`);
 	assert.equal(deckV2Res.status, 200, 'GET /api/replay/:id/deck-v2 → 200');
 	const { draft } = (await deckV2Res.json()) as { draft: { source: string; slides: unknown[]; changes: Array<{ kind: string }> } };
-	assert.match(draft.source, /Was wir früher klären sollten/);
+	assert.match(draft.source, /What to clarify earlier/);
 	assert.equal(draft.source.includes('Smoke secret question'), false, 'Deck V2 leakt keine Fragetexte');
 	assert.equal(draft.source.includes('speakerNotes'), false, 'Deck V2 leakt keine Speaker Notes');
 	assert.equal(draft.changes.some((change) => change.kind === 'clarify'), true, 'Deck V2 dokumentiert Klarstellungsänderung');
 	const deckV2MdRes = await fetch(`${BASE}/api/replay/${id}/deck-v2?format=md`);
 	assert.equal(deckV2MdRes.status, 200, 'GET /deck-v2?format=md → 200');
 	const deckV2Markdown = await deckV2MdRes.text();
-	assert.match(deckV2Markdown, /Was wir früher klären sollten/);
+	assert.match(deckV2Markdown, /What to clarify earlier/);
 	assert.equal(deckV2Markdown.includes('Smoke secret question'), false, 'Deck V2 Markdown leakt keine Fragetexte');
-	assert.match(replayHtml, /DECK V2 DRAFT|Deck V2 Draft/i);
+	// Details sind im action-first Replay per Default eingeklappt: Teaser + API decken den Deck-V2-Bereich ab.
+	assert.match(replayHtml, /V2 deck draft|V2-Deck-Entwurf/i);
 	ok('Deck V2 Draft liefert public-safe Markdown und Replay-UI');
 
 	// 4f) Session Coach liefert Next-Talk-Checklist public-safe.

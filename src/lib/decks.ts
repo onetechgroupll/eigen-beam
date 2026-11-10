@@ -80,129 +80,147 @@ export type Deck = {
 };
 
 export const DEMO_DECK: Slide[] = [
-	{ eyebrow: 'eigen.beam', headline: 'Live auf jedem Phone im Raum.', body: 'Kein Beamer. Du führst, alle folgen.' },
-	{ eyebrow: 'Das Problem', headline: 'Kein Screen, acht Phones.', body: 'Bisher: reden und das PDF danach schicken.' },
-	{ eyebrow: 'Der Beweis', headline: 'Retail Media, endlich messbar.', body: 'Jede Ausspielung, jeder Kontakt — ein Wert.' },
-	{ eyebrow: 'Der Unterschied', headline: 'Ein PDF kann das nicht.', body: 'Es erzwingt nicht, dass alle auf deiner Folie sind.' },
-	{ eyebrow: 'Jetzt', headline: 'Swipe zurück zum Nachlesen.', body: 'Du springst jederzeit zur Live-Folie zurück.' }
+	{ eyebrow: 'eigen.beam', headline: 'Live on every phone in the room.', body: 'No projector. You lead, everyone follows.' },
+	{ eyebrow: 'The problem', headline: 'No screen, eight phones.', body: 'Before: talk now and send the PDF afterwards.' },
+	{ eyebrow: 'The proof', headline: 'Retail media, finally measurable.', body: 'Every placement, every contact — one value.' },
+	{ eyebrow: 'The difference', headline: 'A PDF cannot do this.', body: 'It cannot keep everyone on the same slide.' },
+	{ eyebrow: 'Now', headline: 'Swipe back to reread.', body: 'Jump back to the live slide at any time.' }
 ];
 
 export const DECK_TEMPLATE = `Eyebrow-Label
-# Deine erste Folie
-Ein Satz, der die Idee trägt.
-++ Reveal-Punkt eins
-++ Reveal-Punkt zwei
+# Your first slide
+One sentence that carries the idea.
+++ First reveal
+++ Second reveal
 
 ---
 
 type: number
-Kernsignal
+Core signal
 # 8 Phones
-Ein gemeinsamer Fokus, ohne Beamer.
+One shared focus, without a projector.
 
 ---
 
 type: quote
-# „Ein PDF kann das nicht."
-— eigen.beam Prinzip
+# “A PDF cannot do this.”
+— eigen.beam principle
 
 ---
 
 type: compare
-# Vorher / Nachher
-left: PDF danach | Kein gemeinsamer Moment im Raum.
-right: Live-Sync | Alle sind auf deiner Folie.
+# Before / after
+left: PDF afterwards | No shared moment in the room.
+right: Live sync | Everyone is on your slide.
 
 ---
 
 type: timeline
-# Ablauf
-- 00:00: QR öffnen
-- 00:15: Alle live
-- 05:00: Recap-Link teilen
+# Flow
+- 00:00: Open QR code
+- 00:15: Everyone live
+- 05:00: Share recap link
 
 ---
 
-# Bild-Folie
-Bild per Upload oder Markdown einbetten:
+# Image slide
+Add an image by upload or Markdown:
 
 ![](https://images.unsplash.com/photo-1483478550801-ceba5fe50e8e?w=900)
 `;
 
 export const TEMPLATES: Record<string, { label: string; source: string }> = {
+	starterDe: {
+		label: 'Deutsches Starterdeck',
+		source: `Einstieg
+# Deine erste Folie
+Ein Satz, der die Idee trägt.
+
+---
+
+Beweis
+# Was hängen bleiben soll
+Ein konkreter Proof-Moment.
+
+---
+
+Nächster Schritt
+# Was jetzt passiert
+Eine klare Bitte.`
+	},
 	narrative: {
 		label: 'Narrative Arc',
 		source: `Hook
-# Die eine Sache, die hängen bleiben soll
-Warum das jetzt relevant ist.
+# The one thing people should remember
+Why it matters now.
 
 ---
 
 Problem
-# Was gerade nicht funktioniert
-Ein konkreter Schmerz, keine Liste.
+# What is not working
+One concrete pain point, not a list.
 
 ---
 
 Proof
-# Der Beweis
-Zahl, Beispiel oder Demo-Moment.
+# The proof
+A number, example, or demo moment.
 
 ---
 
 CTA
-# Was als Nächstes passiert
-Ein klarer nächster Schritt.`
+# What happens next
+One clear next step.`
 	},
 	pitch: {
 		label: 'Pitch',
 		source: `Setup
-# Warum jetzt?
-Der Kontext in einem Satz.
+# Why now?
+The context in one sentence.
 
 ---
 
 type: compare
-# Alte Welt / Neue Welt
-left: Heute | Was bremst.
-right: Mit uns | Was einfacher wird.
+# Old world / new world
+left: Today | What slows you down.
+right: With us | What becomes easier.
 
 ---
 
 type: number
-# 3× schneller
-Der eine messbare Vorteil.
+# 3× faster
+The one measurable advantage.
 
 ---
 
 Decision
-# Entscheidung
-Was wir heute brauchen.`
+# Decision
+What we need today.`
 	},
 	update: {
 		label: 'Update',
 		source: `Status
-# Wo wir stehen
-Kurz, konkret, nicht defensiv.
+# Where we are
+Short, concrete, and direct.
 
 ---
 
 type: timeline
-# Fortschritt
-- Done: Was fertig ist
-- Now: Was gerade passiert
-- Next: Was als Nächstes kommt
+# Progress
+- Done: What is complete
+- Now: What is happening
+- Next: What comes next
 
 ---
 
-Risiko
-# Worauf wir achten müssen
-Ein echtes Risiko + Umgang.
+Risk
+# What needs attention
+One real risk and how we handle it.
 
 ---
 
 Ask
-# Was ich brauche
-Eine klare Bitte.`
+# What I need
+One clear ask.`
 	}
 };

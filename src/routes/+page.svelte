@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { conversionCta } from '$lib/polish';
+	import { useI18n } from '$lib/i18n/context';
 
 	let creating = $state(false);
-	const cta = conversionCta('home');
+	const { t } = useI18n();
 
 	async function start() {
 		creating = true;
@@ -14,7 +14,7 @@
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ claimToken })
 		});
-		if (!claim.ok) throw new Error('Presenter-Claim fehlgeschlagen');
+		if (!claim.ok) throw new Error(t('editor.presenter_failed'));
 		// Presenter-Token wird erst vom /present/:id/claim Endpoint als httpOnly-Cookie gesetzt.
 		goto(`/present/${id}`);
 	}
@@ -22,20 +22,20 @@
 
 <main>
 	<div class="wrap">
-		<div class="mono tag">{cta.kicker}</div>
-		<h1>{cta.title}</h1>
-		<p>{cta.body}</p>
-		<div class="contrast" aria-label="Vorher Nachher">
-			<span>PDF danach schicken war gestern.</span>
-			<strong>Heute folgen alle Phones live.</strong>
+		<div class="mono tag">{t('home.kicker')}</div>
+		<h1>{t('home.title')}</h1>
+		<p>{t('home.body')}</p>
+		<div class="contrast">
+			<span>{t('home.before')}</span>
+			<strong>{t('home.after')}</strong>
 		</div>
-		<p class="proof">No login · QR oder Link teilen · alle Phones folgen live.</p>
+		<p class="proof">{t('home.proof')}</p>
 		<div class="cta">
 			<button onclick={start} disabled={creating}>
-				{creating ? 'Starte …' : `${cta.primary} →`}
+				{creating ? t('home.starting') : `${t('home.start')} →`}
 			</button>
-			<a class="secondary" href="/new">{cta.secondary}</a>
-			<a class="secondary" href="/account">Meine Decks</a>
+			<a class="secondary" href="/new">{t('home.prepare')}</a>
+			<a class="secondary" href="/account">{t('common.my_decks')}</a>
 		</div>
 	</div>
 </main>

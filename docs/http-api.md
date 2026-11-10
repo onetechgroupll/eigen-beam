@@ -6,9 +6,31 @@ The browser app talks to these endpoints. You can call them from scripts too. Fo
 
 - **Base URL:** your instance's `ORIGIN`. Examples use `https://beam.example.com`.
 - **Body:** JSON unless stated as `multipart/form-data`.
-- **Errors:** `{ "error": true, "message": "…" }`. A few routes return `{ "error": "not_found" }` or `{ "error": "forbidden" }` instead. Messages are German (the UI language).
+- **Errors:** `{ "error": true, "code": "deck_not_found", "message": "…" }`. `code` is stable for programmatic handling; `message` follows the request locale (locale cookie, then `Accept-Language`, then `EB_DEFAULT_LOCALE`). Do not branch on translated messages.
 - **Rate limits:** per client IP, per process, in fixed windows. Exceeding one returns `429` with a `retry-after` header. Limits are listed per endpoint.
 - **CSRF:** SvelteKit rejects cross-origin form and upload POSTs. Send requests from the same origin, or from a non-browser client.
+
+### Stable error codes
+
+| Code | Typical status | Meaning |
+|---|---:|---|
+| `deck_not_found`, `replay_not_found`, `room_not_found`, `export_format_not_found` | 404 | The requested resource or format does not exist. |
+| `room_ended`, `already_ended`, `export_expired` | 410 | The live resource or export window has ended. |
+| `forbidden`, `deck_forbidden`, `presenter_forbidden`, `replay_pin_required` | 403 | The caller lacks access or a replay unlock. |
+| `pin_required`, `pin_invalid` | 401/403 | A room PIN is missing or incorrect. |
+| `login_required`, `team_login_required` | 401 | A signed-in identity is required. |
+| `deck_empty`, `invalid_deck`, `invalid_event`, `question_required`, `invalid_email`, `invalid_visibility` | 400 | Request validation failed. |
+| `file_required`, `image_required`, `pdf_required`, `pptx_required`, `audio_required`, `unsupported_file` | 400/415/422 | An upload is missing or unsupported. |
+| `source_too_long`, `file_too_large` | 413 | A request exceeded a documented size limit. |
+| `too_many_requests` | 429 | The per-process request limit was exceeded. |
+| `busy` | 503 | The live room capacity is exhausted. |
+| `mail_failed`, `internal_error` | 500/502 | A server-side operation failed. |
+
+OAuth and MCP endpoints retain their protocol-defined error shapes and codes.
+
+### Interface locale
+
+`POST /api/locale` accepts form fields `locale` (`de` or `en`) and `redirectTo`. A valid locale is stored in the httpOnly `eb_locale` cookie for one year. `redirectTo` must be a local absolute path without backslashes, protocol-relative prefixes or control characters; unsafe values fall back to `/`.
 
 ### Identity
 

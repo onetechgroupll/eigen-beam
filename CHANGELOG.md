@@ -15,10 +15,10 @@ Semver tags publish a GHCR image and a GitHub release. Each versioned section in
 - Added advisory-locked, transactional migrations with bounded retries and a Node-compatible runtime runner.
 - Added schema-aware readiness checks with OAuth-only MCP support and secret-safe per-check remediation.
 - Added the Docker/Postgres release smoke and operator upgrade/rollback documentation.
-
 - Self-hosters get a Compose stack with Postgres, MinIO and persistent data, plus a highlighted login link and code in Outbox logs outside production for the first login.
 - MCP Bearer setup now uses `EB_MCP_URL` and `http://localhost:4176/mcp` consistently across the wrapper, smoke and setup documentation.
 - Directive values preserve Unicode line and paragraph separators, and the local Clarity fallback keeps text slides with inline images from becoming full-bleed image slides.
+- Added complete English/German UI localization with request-level locale resolution, persistent language controls, localized mail/API messages, stable API error codes, English-first starter content, an i18n CI guard, and an accessibility pass for dialogs and forms.
 - Markdown export and cloning now roundtrip all six slide types without losing number or quote content, escape reserved body syntax, and keep original source with speaker notes available only to the owner export.
 - An explicit `type: text` now keeps an attached image inline instead of switching the slide to the full-bleed image layout.
 - Presenter remotes can explicitly end a session from the Session menu or final slide, with question export, retry-safe acknowledgement and a persisted end summary. Viewers receive a replay-first end screen, including after reconnect or activity-store fallback; ended rooms now have a configurable retention TTL and deterministic eviction.

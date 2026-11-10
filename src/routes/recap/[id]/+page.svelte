@@ -2,9 +2,11 @@
 	import { goto } from '$app/navigation';
 	import SlideView from '$lib/components/SlideView.svelte';
 	import { conversionCta, pacingHint } from '$lib/polish';
+	import { useI18n } from '$lib/i18n/context';
 	let { data } = $props();
-	const cta = conversionCta('recap');
-	let totalSeconds = $derived(data.deck.slides.reduce((sum, slide) => sum + pacingHint(slide).seconds, 0));
+	const { locale, t } = useI18n();
+	const cta = conversionCta('recap', locale);
+	let totalSeconds = $derived(data.deck.slides.reduce((sum, slide) => sum + pacingHint(slide, locale).seconds, 0));
 	let email = $state('');
 	let followMsg = $state('');
 	async function clone() {
@@ -14,17 +16,17 @@
 	async function follow() {
 		followMsg = '';
 		const res = await fetch('/api/follow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, deckId: data.deck.id }) });
-		followMsg = res.ok ? 'Gespeichert — wir pingen dich beim nächsten Deck.' : 'Konnte Follow nicht speichern.';
+		followMsg = res.ok ? t('recap.follow_saved') : t('recap.follow_failed');
 	}
 </script>
 
 <main>
-	<header><a href="/">← eigen.beam</a><button onclick={clone}>Deck klonen →</button></header>
+	<header><a href="/">← eigen.beam</a><button onclick={clone}>{t('recap.clone')}</button></header>
 	<section class="hero">
 		<div>
-			<div class="mono tag">RECAP</div>
+			<div class="mono tag">{t('common.recap')}</div>
 			<h1>{data.deck.title}</h1>
-			<p>{data.deck.slides.length} Slides · ca. {Math.max(1, Math.round(totalSeconds / 60))} Min. Lese-/Talk-Zeit · vertikal fürs Phone.</p>
+			<p>{t(data.deck.slides.length === 1 ? 'recap.meta_one' : 'recap.meta_other', { count: data.deck.slides.length, minutes: Math.max(1, Math.round(totalSeconds / 60)) })}</p>
 		</div>
 		<div class="hero-card">
 			<span class="mono">{cta.kicker}</span>
@@ -34,13 +36,13 @@
 		</div>
 	</section>
 	<form class="follow" onsubmit={(e) => { e.preventDefault(); follow(); }}>
-		<label>Ping mich beim nächsten Mal <input bind:value={email} type="email" placeholder="du@example.com" /></label>
-		<button>Folgen</button>
+		<label>{t('recap.follow_label')} <input bind:value={email} type="email" autocomplete="email" placeholder="you@example.com" /></label>
+		<button>{t('recap.follow')}</button>
 		{#if followMsg}<span>{followMsg}</span>{/if}
 	</form>
 	<div class="slides">
 		{#each data.deck.slides as slide, i}
-			<section><span class="mono">{i + 1} / {data.deck.slides.length} · ~{pacingHint(slide).seconds}s</span><SlideView {slide} /></section>
+			<section><span class="mono">{i + 1} / {data.deck.slides.length} · ~{pacingHint(slide, locale).seconds}s</span><SlideView {slide} /></section>
 		{/each}
 	</div>
 </main>
