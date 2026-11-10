@@ -12,6 +12,7 @@
 	--surface-3: rgba(66, 58, 38, 0.085);
 	--accent: #bfe84b;
 	--accent-fg: #111111;
+	--focus-ring: #557500;
 	--live-dot: #111111;
 	--shadow-soft: 0 24px 80px rgba(16, 17, 18, 0.08);
 	--radius-xl: 28px;
@@ -30,6 +31,7 @@
 		--surface-3: rgba(255, 255, 255, 0.1);
 		--accent: #c8f250;
 		--accent-fg: #0a0a0a;
+		--focus-ring: #c8f250;
 		--live-dot: #c8f250;
 		--shadow-soft: 0 24px 90px rgba(0, 0, 0, 0.34);
 	}
@@ -67,7 +69,7 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
-	outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+	outline: 3px solid var(--focus-ring);
 	outline-offset: 3px;
 }
 

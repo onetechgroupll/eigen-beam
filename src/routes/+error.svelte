@@ -1,14 +1,16 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { useI18n } from '$lib/i18n/context';
+	const { t } = useI18n();
 </script>
 
 <main>
 	<div class="mono tag">EIGEN.BEAM</div>
-	<h1>{$page.status === 410 ? 'Präsentation beendet.' : 'Nicht gefunden.'}</h1>
-	<p>{$page.error?.message ?? 'Dieser Link ist nicht mehr erreichbar.'}</p>
+	<h1>{$page.status === 410 ? t('error.ended_title') : t('error.not_found_title')}</h1>
+	<p>{$page.error?.message ?? t('error.unreachable')}</p>
 	<div class="actions">
-		<a href="/new">Deck vorbereiten</a>
-		<a class="secondary" href="/account">Meine Decks</a>
+		<a href="/new">{t('home.prepare')}</a>
+		<a class="secondary" href="/account">{t('common.my_decks')}</a>
 	</div>
 </main>
 

@@ -7,8 +7,10 @@
 	import { conversionCta, liveSentimentLabel, pacingHint, reopenInsight, replaySentiment } from '$lib/polish';
 	import { buildSessionSummary } from '$lib/session-summary';
 	import { buildSlideHeatmap } from '$lib/slide-heatmap';
+	import { useI18n } from '$lib/i18n/context';
 	let { data } = $props();
-	const cta = conversionCta('replay');
+	const { locale, t } = useI18n();
+	const cta = conversionCta('replay', locale);
 	const initial = <T>(read: () => T): T => read();
 	let current = $state(0);
 	let playing = $state(false);
@@ -17,9 +19,9 @@
 	let slide = $derived(data.replay.slides[current]);
 	let events: ReplayEvent[] = $derived(data.replay.events.filter((e: ReplayEvent) => e.slide === current));
 	let sentiment = $derived(replaySentiment(data.replay.events, total));
-	let sentimentLabel = $derived(liveSentimentLabel(sentiment));
-	let pace = $derived(pacingHint(slide));
-	let reopen = $derived(reopenInsight(data.replay.stats));
+	let sentimentLabel = $derived(liveSentimentLabel(sentiment, locale));
+	let pace = $derived(pacingHint(slide, locale));
+	let reopen = $derived(reopenInsight(data.replay.stats, locale));
 	let summary = $derived(buildSessionSummary(data.replay));
 	let followUpPack = $derived(buildFollowUpPack(data.replay, { baseUrl: data.origin }));
 	let heatmap = $derived(buildSlideHeatmap(data.replay));
@@ -54,91 +56,91 @@
 			const out = await res.json().catch(() => ({}));
 			if (res.ok) {
 				followState = 'done';
-				followMsg = out.isNew === false ? 'Du folgst schon — alles gut.' : 'Eingetragen. Wir pingen dich.';
+				followMsg = out.isNew === false ? t('replay.already_following') : t('replay.following');
 			} else {
 				followState = 'error';
-				followMsg = out.message ?? 'Hat nicht geklappt.';
+				followMsg = out.message ?? t('replay.follow_failed');
 			}
 		} catch {
 			followState = 'error';
-			followMsg = 'Netzwerkfehler.';
+			followMsg = t('common.network_error');
 		}
 	}
 </script>
 
 <main>
-	<header><a href="/">← eigen.beam</a><span class="mono">Replay {data.replay.ended ? 'abgeschlossen' : 'live snapshot'}</span></header>
-	<section class="command" aria-label="Replay Command Center">
-		<div><span class="mono tag">NEXT BEST ACTION</span><h1>Follow-up mailen.</h1><p>{nextAction?.label ?? 'Nächsten Talk verbessern'}: {nextAction?.detail ?? 'Summary, Heatmap und Coach bleiben in den Details.'}</p></div>
+	<header><a href="/">← eigen.beam</a><span class="mono">Replay {data.replay.ended ? t('replay.status_done') : t('replay.status_live')}</span></header>
+	<section class="command" aria-label={t('replay.command_center')}>
+		<div><span class="mono tag">{t('replay.next_best_action')}</span><h1>{t('replay.followup_title')}</h1><p>{nextAction?.label ?? t('replay.improve_talk')}: {nextAction?.detail ?? t('replay.details_hint')}</p></div>
 		<div class="command-actions">
-			<a class="primary" href={`mailto:?subject=${encodeURIComponent(followUpPack.subject)}&body=${encodeURIComponent(followUpPack.emailBody)}`}>Follow-up mailen</a>
-			<button onclick={() => document.getElementById('session-replay')?.scrollIntoView({ behavior: 'smooth' })}>Session ansehen</button>
-			<button aria-expanded={showDetails} onclick={() => (showDetails = !showDetails)}>{showDetails ? 'Details schließen' : 'Details öffnen'}</button>
+			<a class="primary" href={`mailto:?subject=${encodeURIComponent(followUpPack.subject)}&body=${encodeURIComponent(followUpPack.emailBody)}`}>{t('replay.followup_title')}</a>
+			<button onclick={() => document.getElementById('session-replay')?.scrollIntoView({ behavior: 'smooth' })}>{t('replay.view_session')}</button>
+			<button aria-expanded={showDetails} onclick={() => (showDetails = !showDetails)}>{showDetails ? t('replay.details_close') : t('replay.details_open')}</button>
 		</div>
 	</section>
 	<section class="hero">
-		<div><div class="mono tag">REPLAY</div><h1>Session nochmal erleben.</h1><p>{total} Slides · Resonanz: {sentimentLabel} · aktuelle Folie ~{pace.seconds}s.</p><p><strong>{cta.title}</strong> {cta.body}</p></div>
+		<div><div class="mono tag">REPLAY</div><h1>{t('replay.hero')}</h1><p>{t(total === 1 ? 'replay.hero_meta_one' : 'replay.hero_meta_other', { count: total, sentiment: sentimentLabel, seconds: pace.seconds })}</p><p><strong>{cta.title}</strong> {cta.body}</p></div>
 		<a class="make" href="/new">{cta.primary} →</a>
 	</section>
-	<section id="summary" class="summary" aria-label="Session Summary">
-		<div class="summary-head"><div><span class="mono tag">SESSION SUMMARY</span><h2>Was eigen.beam schon für dich gebaut hat.</h2></div><div class="summary-actions"><a href={`/api/replay/${data.replay.id}/summary?format=md`}>Summary exportieren</a></div></div>
-		<p class="details-teaser">Details öffnen zeigt Slide Heatmap, Deck V2 Draft, Session Coach und Follow-up Pack.</p>
+	<section id="summary" class="summary" aria-label={t('replay.summary_kicker')}>
+		<div class="summary-head"><div><span class="mono tag">{t('replay.summary_kicker')}</span><h2>{t('replay.summary_title')}</h2></div><div class="summary-actions"><a href={`/api/replay/${data.replay.id}/summary?format=md`}>{t('replay.summary_export')}</a></div></div>
+		<p class="details-teaser">{t('replay.details_teaser')}</p>
 		<div class="summary-grid">
-			<article><strong>{summary.totals.engagements}</strong><span>Signale</span></article>
+			<article><strong>{summary.totals.engagements}</strong><span>{t('replay.signals')}</span></article>
 			<article><strong>{summary.totals.peakConcurrent}</strong><span>Peak</span></article>
 			<article><strong>{summary.totals.reopenRate}%</strong><span>Re-Open</span></article>
 		</div>
 		<div class="summary-copy">
-			<div><h3>Was gelandet ist</h3><ul>{#each summary.whatLanded as item}<li>{item}</li>{/each}</ul></div>
-			<div><h3>Nächstes Mal klären</h3><ul>{#each summary.clarifyNext as item}<li>{item}</li>{/each}</ul></div>
+			<div><h3>{t('replay.what_landed')}</h3><ul>{#each summary.whatLanded as item}<li>{item}</li>{/each}</ul></div>
+			<div><h3>{t('replay.clarify_next')}</h3><ul>{#each summary.clarifyNext as item}<li>{item}</li>{/each}</ul></div>
 		</div>
-		{#if summary.topSlides.length}<div class="top-slides"><h3>Top-Folien</h3>{#each summary.topSlides as item}<button onclick={() => current = item.index}>{item.label} · {item.headline}<span>{item.score}</span></button>{/each}</div>{/if}
+		{#if summary.topSlides.length}<div class="top-slides"><h3>{t('replay.top_slides')}</h3>{#each summary.topSlides as item}<button onclick={() => current = item.index}>{item.label} · {item.headline}<span>{item.score}</span></button>{/each}</div>{/if}
 	</section>
 	{#if showDetails}
-	<section class="followup" aria-label="One-Tap Follow-up Pack">
-		<div><span class="mono tag">FOLLOW-UP PACK</span><h2>Ein Text für Mail oder Gruppenchat.</h2><p>Aus Summary + Replay gebaut, ohne Fragetexte oder Speaker Notes zu leaken.</p></div>
-		<div class="followup-actions"><a href={`/api/replay/${data.replay.id}/followup?format=md`}>Markdown laden</a><a href={`mailto:?subject=${encodeURIComponent(followUpPack.subject)}&body=${encodeURIComponent(followUpPack.emailBody)}`}>Mail öffnen</a><a href={`/api/replay/${data.replay.id}/followup`}>JSON</a></div>
+	<section class="followup" aria-label={t('replay.followup_kicker')}>
+		<div><span class="mono tag">{t('replay.followup_kicker')}</span><h2>{t('replay.followup_pack_title')}</h2><p>{t('replay.followup_pack_body')}</p></div>
+		<div class="followup-actions"><a href={`/api/replay/${data.replay.id}/followup?format=md`}>{t('replay.download_markdown')}</a><a href={`mailto:?subject=${encodeURIComponent(followUpPack.subject)}&body=${encodeURIComponent(followUpPack.emailBody)}`}>{t('replay.open_mail')}</a><a href={`/api/replay/${data.replay.id}/followup`}>JSON</a></div>
 		<pre>{followUpPack.chatText}</pre>
 	</section>
-	<section class="heatmap" aria-label="Slide Heatmap">
-		<div class="summary-head"><div><span class="mono tag">SLIDE HEATMAP</span><h2>Welche Folie wirklich gearbeitet hat.</h2></div><div class="summary-actions"><a href={`/api/replay/${data.replay.id}/heatmap?format=md`}>Markdown laden</a><a href={`/api/replay/${data.replay.id}/heatmap`}>JSON ansehen</a></div></div>
+	<section class="heatmap" aria-label={t('replay.heatmap_kicker')}>
+		<div class="summary-head"><div><span class="mono tag">{t('replay.heatmap_kicker')}</span><h2>{t('replay.heatmap_title')}</h2></div><div class="summary-actions"><a href={`/api/replay/${data.replay.id}/heatmap?format=md`}>{t('replay.download_markdown')}</a><a href={`/api/replay/${data.replay.id}/heatmap`}>{t('replay.view_json')}</a></div></div>
 		<div class="heatmap-bars">{#each heatmap.slides as item}<button class={item.classification} onclick={() => current = item.index} title={`${item.label}: ${item.why}`}><span style={`height:${Math.max(8, item.intensity)}%`}></span><strong>{item.label}</strong><small>{item.intensity}%</small></button>{/each}</div>
-		<div class="heatmap-notes"><p>{heatmap.hottest ? `Heißeste Folie: ${heatmap.hottest.label} „${heatmap.hottest.headline}“ — ${heatmap.hottest.why}.` : 'Noch keine heiße Folie.'}</p><p>{heatmap.confusing ? `Meiste Fragen: ${heatmap.confusing.label} „${heatmap.confusing.headline}“ — beim nächsten Mal früher kontextualisieren.` : 'Keine Frage-Häufung sichtbar.'}</p></div>
+		<div class="heatmap-notes"><p>{heatmap.hottest ? t('replay.hottest', { label: heatmap.hottest.label, headline: heatmap.hottest.headline, why: heatmap.hottest.why }) : t('replay.no_hot')}</p><p>{heatmap.confusing ? t('replay.confusing', { label: heatmap.confusing.label, headline: heatmap.confusing.headline }) : t('replay.no_questions')}</p></div>
 	</section>
-	<section class="deckv2" aria-label="Deck V2 Draft">
-		<div><span class="mono tag">DECK V2 DRAFT</span><h2>Aus der Session ein besseres Folge-Deck.</h2><p>Guardrailed: nutzt nur öffentliche Slides und aggregierte Signale — keine Fragetexte, keine Speaker Notes.</p></div>
-		<div class="deckv2-actions"><a href={`/api/replay/${data.replay.id}/deck-v2?format=md`}>V2 Markdown laden</a><a href={`/api/replay/${data.replay.id}/deck-v2`}>JSON ansehen</a></div>
+	<section class="deckv2" aria-label={t('replay.deck_v2_kicker')}>
+		<div><span class="mono tag">{t('replay.deck_v2_kicker')}</span><h2>{t('replay.deck_v2_title')}</h2><p>{t('replay.deck_v2_body')}</p></div>
+		<div class="deckv2-actions"><a href={`/api/replay/${data.replay.id}/deck-v2?format=md`}>{t('replay.download_markdown')}</a><a href={`/api/replay/${data.replay.id}/deck-v2`}>{t('replay.view_json')}</a></div>
 		<ul>{#each deckV2.changes as change}<li><strong>{change.label}</strong><span>{change.kind}</span>{change.detail}</li>{/each}</ul>
 	</section>
-	<section id="coach" class="coach" aria-label="Session Coach">
-		<div class="summary-head"><div><span class="mono tag">SESSION COACH</span><h2>Was du vor dem nächsten Talk tun solltest.</h2></div><div class="summary-actions"><a href={`/api/replay/${data.replay.id}/coach?format=md`}>Markdown laden</a><a href={`/api/replay/${data.replay.id}/coach`}>JSON ansehen</a></div></div>
+	<section id="coach" class="coach" aria-label={t('replay.coach_kicker')}>
+		<div class="summary-head"><div><span class="mono tag">{t('replay.coach_kicker')}</span><h2>{t('replay.coach_title')}</h2></div><div class="summary-actions"><a href={`/api/replay/${data.replay.id}/coach?format=md`}>{t('replay.download_markdown')}</a><a href={`/api/replay/${data.replay.id}/coach`}>{t('replay.view_json')}</a></div></div>
 		<ol>{#each coach.actions as action}<li class={action.priority}><span>{action.priority}</span><strong>{action.label}</strong><p>{action.detail}</p></li>{/each}</ol>
 	</section>
 	{/if}
 	<section id="session-replay" class="stage">
 		<div class="phone-wrap">
-			<div class="rail">{#each data.replay.slides as _, i}<button class:on={i === current} onclick={() => current = i} aria-label={`Folie ${i + 1}`}></button>{/each}</div>
+			<div class="rail">{#each data.replay.slides as _, i}<button class:on={i === current} onclick={() => current = i} aria-label={`${t('common.slide')} ${i + 1}`}></button>{/each}</div>
 			<div class="phone"><SlideView {slide} /></div>
 		</div>
 		<aside>
-			<div class="now"><span class="mono">FOLIE {current + 1} / {total}</span><strong>{slide?.headline}</strong><small>{pace.label} · ~{pace.seconds}s</small></div>
-			<div class="actions"><button onclick={() => current = Math.max(0, current - 1)}>‹</button><button onclick={playing ? stop : play}>{playing ? 'Pause' : 'Play'}</button><button onclick={() => current = Math.min(total - 1, current + 1)}>›</button></div>
-			<div class="takeaway"><strong>Takeaway</strong><p>Gemerkte Folien als Clip exportieren.</p><a href={`/api/replay/${data.replay.id}/takeaway?format=md`}>Markdown laden</a><a href={`/api/replay/${data.replay.id}/takeaway`}>JSON ansehen</a></div>
-			<h2>Sentiment</h2>
-			<div class="spark" aria-label="Sentiment-Kurve">{#each sentiment as point, i}<button class:on={i === current} onclick={() => current = i} title={`Folie ${point.label}: ${point.score}`} style={`--h:${Math.max(8, Math.min(50, 18 + point.score * 6))}px`}><span></span></button>{/each}</div>
-			<h2>Timeline</h2>
-			<ul>{#each events as e}<li><code>{e.type}</code>{#if e.type === 'question'}: Frage gestellt{:else if e.type === 'reaction'}: {e.reaction}{/if}</li>{/each}</ul>
-			<h2>Stats</h2>
-			<div class="cards"><span>{data.replay.stats.joins}<small>Joins</small></span><span>{data.replay.stats.reopens}<small>Re-Opens · {reopen.rate}%</small></span><span>{data.replay.stats.reactions}<small>Reaktionen</small></span><span>{data.replay.stats.questions}<small>Fragen</small></span><span>{data.replay.stats.bookmarks}<small>Merker</small></span></div>
+			<div class="now"><span class="mono">{t('replay.slide_label', { current: current + 1, total })}</span><strong>{slide?.headline}</strong><small>{pace.label} · ~{pace.seconds}s</small></div>
+			<div class="actions"><button aria-label={t('editor.previous_slide')} onclick={() => current = Math.max(0, current - 1)}>‹</button><button onclick={playing ? stop : play}>{playing ? t('replay.pause') : t('replay.play')}</button><button aria-label={t('editor.next_slide')} onclick={() => current = Math.min(total - 1, current + 1)}>›</button></div>
+			<div class="takeaway"><strong>{t('common.takeaway')}</strong><p>{t('replay.takeaway_body')}</p><a href={`/api/replay/${data.replay.id}/takeaway?format=md`}>{t('replay.download_markdown')}</a><a href={`/api/replay/${data.replay.id}/takeaway`}>{t('replay.view_json')}</a></div>
+			<h2>{t('common.sentiment')}</h2>
+			<div class="spark" aria-label={t('common.sentiment_chart')}>{#each sentiment as point, i}<button class:on={i === current} onclick={() => current = i} title={`${t('common.slide')} ${point.label}: ${point.score}`} style={`--h:${Math.max(8, Math.min(50, 18 + point.score * 6))}px`}><span></span></button>{/each}</div>
+			<h2>{t('common.timeline')}</h2>
+			<ul>{#each events as e}<li><code>{e.type}</code>{#if e.type === 'question'}: {t('replay.question_event')}{:else if e.type === 'reaction'}: {e.reaction}{/if}</li>{/each}</ul>
+			<h2>{t('common.stats')}</h2>
+			<div class="cards"><span>{data.replay.stats.joins}<small>{t('common.joins')}</small></span><span>{data.replay.stats.reopens}<small>{t('common.reopens')} · {reopen.rate}%</small></span><span>{data.replay.stats.reactions}<small>{t('replay.reactions')}</small></span><span>{data.replay.stats.questions}<small>{t('common.questions')}</small></span><span>{data.replay.stats.bookmarks}<small>{t('present.bookmarks')}</small></span></div>
 			<p class="reopen-summary">{reopen.label}: {reopen.detail}</p>
-			<h2 id="follow-save">Replay & Summary sichern</h2>
-			<p class="save-copy">Replay, Summary und Follow-up sind jetzt fertig. E-Mail eintragen, damit du sie wiederfindest.</p>
+			<h2 id="follow-save">{t('replay.save_replay')}</h2>
+			<p class="save-copy">{t('replay.save_body')}</p>
 			{#if followState === 'done'}
 				<p class="follow-ok">{followMsg}</p>
 			{:else}
 				<form class="follow" onsubmit={follow}>
-					<input type="email" bind:value={followEmail} placeholder="deine@email.de" required aria-label="Email für Follow" />
-					<button type="submit" disabled={followState === 'sending'}>{followState === 'sending' ? '…' : 'Replay sichern'}</button>
+					<label class="follow-label" for="replay-email">{t('replay.email_label')}</label><input id="replay-email" type="email" bind:value={followEmail} autocomplete="email" placeholder="you@example.com" required />
+					<button type="submit" disabled={followState === 'sending'}>{followState === 'sending' ? '…' : t('replay.save_action')}</button>
 				</form>
 				{#if followState === 'error'}<p class="follow-err">{followMsg}</p>{/if}
 			{/if}
@@ -238,7 +240,8 @@
 	.reopen-summary { color: var(--muted); font-size: 13px; margin: 8px 0 14px; }
 	.save-copy { color: var(--muted); font-size: 13px; line-height: 1.4; margin: -4px 0 8px; }
 	ul { padding-left: 18px; color: var(--muted); }
-	.follow { display:flex; gap:8px; margin-top:8px; }
+	.follow { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+	.follow-label { width:100%; color:var(--muted); font-size:13px; }
 	.follow input { flex:1; min-width:0; border:1px solid var(--hair); background:transparent; color:var(--fg); border-radius:999px; padding:10px 16px; }
 	.follow-ok { color: var(--accent, #b6ff3a); }
 	.follow-err { color: #ff6b6b; }

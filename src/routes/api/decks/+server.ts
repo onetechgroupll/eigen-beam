@@ -5,14 +5,15 @@ import { getOrCreateActorId, getActorId } from '$lib/server/identity';
 import { buildDeckInput } from '$lib/server/deck-input';
 import { clientRateLimitKey, rateLimit, RATE_LIMITS } from '$lib/server/rate-limit';
 import { toDeckLibraryItems } from '$lib/account';
+import { apiError } from '$lib/server/api-error';
 
 // POST /api/decks — Markdown/Text → slides → persistiertes Deck (Creator-ID-Cookie).
-export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
-	const limited = rateLimit(clientRateLimitKey('deck-write', getClientAddress), RATE_LIMITS.deckWrite);
+export const POST: RequestHandler = async ({ request, cookies, getClientAddress, locals }) => {
+	const limited = rateLimit(clientRateLimitKey('deck-write', getClientAddress), RATE_LIMITS.deckWrite, locals.locale);
 	if (limited) return limited;
 	const body = await request.json().catch(() => ({}));
 	const parsed = buildDeckInput(body);
-	if (!parsed.ok) return json({ error: true, message: parsed.message }, { status: parsed.status });
+	if (!parsed.ok) return apiError({ locals }, parsed.status === 413 ? 'source_too_long' : 'invalid_deck', parsed.status);
 
 	const owner = getOrCreateActorId(cookies);
 	const deck = await getDeckRepo().create(parsed.input, owner);

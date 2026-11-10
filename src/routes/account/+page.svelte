@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
+	import { useI18n } from '$lib/i18n/context';
 	type DeckVisibility = 'private' | 'link' | 'team';
 
 	let { data } = $props();
@@ -19,15 +21,16 @@
 	let msg = $state('');
 	let err = $state(false);
 	let libraryHighlightTimer: ReturnType<typeof setTimeout> | undefined;
+	const { locale, t } = useI18n();
 
 	function formatDate(ts: number): string {
-		return new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(ts));
+		return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(ts));
 	}
 
 	function visibilityLabel(visibility: DeckVisibility): string {
-		if (visibility === 'link') return 'Link sichtbar';
-		if (visibility === 'team') return 'Team sichtbar';
-		return 'Privat';
+		if (visibility === 'link') return t('common.link_visible');
+		if (visibility === 'team') return t('common.team_visible');
+		return t('common.private');
 	}
 
 	function openLibrary() {
@@ -48,8 +51,8 @@
 				body: JSON.stringify({ email })
 			});
 			const j = await res.json().catch(() => ({}));
-			if (!res.ok) { err = true; msg = j.message ?? 'Login-Link konnte nicht gesendet werden.'; return; }
-			msg = j.magicLink ? `Login-Link: ${j.magicLink}` : 'Login-Link gesendet. Öffne ihn auf diesem Gerät, um deine Decks zu übernehmen.';
+			if (!res.ok) { err = true; msg = j.message ?? t('api.mail_failed'); return; }
+			msg = j.magicLink ? `Login link: ${j.magicLink}` : t('account.link_sent');
 		} finally { sending = false; }
 	}
 
@@ -59,16 +62,16 @@
 	}
 
 	async function deleteDeck(id: string, title: string) {
-		if (deleting || !confirm(`„${title || 'Unbenanntes Deck'}" wirklich löschen?`)) return;
+		if (deleting || !confirm(t('account.delete_confirm', { title: title || t('common.untitled_deck') }))) return;
 		deleting = id; err = false; msg = '';
 		try {
 			const res = await fetch(`/api/decks/${id}`, { method: 'DELETE' });
 			if (!res.ok) {
 				const j = await res.json().catch(() => ({}));
-				err = true; msg = j.message ?? 'Deck konnte nicht gelöscht werden.'; return;
+				err = true; msg = j.message ?? t('api.deck_forbidden'); return;
 			}
 			decks = decks.filter((deck) => deck.id !== id);
-			msg = 'Deck gelöscht.';
+			msg = t('account.deleted');
 		} finally { deleting = ''; }
 	}
 
@@ -86,9 +89,9 @@
 				body: JSON.stringify({ visibility })
 			});
 			const j = await res.json().catch(() => ({}));
-			if (!res.ok) { err = true; msg = j.message ?? 'Sharing konnte nicht geändert werden.'; return; }
+			if (!res.ok) { err = true; msg = j.message ?? t('account.sharing_failed'); return; }
 			decks = decks.map((deck) => deck.id === id ? j.deck : deck);
-			msg = `Sichtbarkeit: ${visibilityLabel(j.deck.visibility)}.`;
+			msg = t('account.visibility_updated', { visibility: visibilityLabel(j.deck.visibility) });
 		} finally { sharing = ''; }
 	}
 
@@ -97,7 +100,7 @@
 		try {
 			const res = await fetch(`/api/decks/${id}/clone`, { method: 'POST' });
 			const j = await res.json().catch(() => ({}));
-			if (!res.ok) { err = true; msg = j.message ?? 'Deck konnte nicht geklont werden.'; return; }
+			if (!res.ok) { err = true; msg = j.message ?? t('api.deck_forbidden'); return; }
 			await goto(`/edit/${j.id}`);
 		} finally { cloning = ''; }
 	}
@@ -111,51 +114,51 @@
 				body: JSON.stringify({ deckId: id })
 			});
 			const out = await res.json().catch(() => ({}));
-			if (!res.ok) { err = true; msg = out.message ?? 'Live-Session konnte nicht gestartet werden.'; return; }
+			if (!res.ok) { err = true; msg = out.message ?? t('editor.start_failed'); return; }
 			const claim = await fetch(`/present/${out.id}/claim`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ claimToken: out.claimToken })
 			});
-			if (!claim.ok) { err = true; msg = 'Presenter-Zugriff konnte nicht gesetzt werden.'; return; }
+			if (!claim.ok) { err = true; msg = t('editor.presenter_failed'); return; }
 			await goto(`/present/${out.id}`);
 		} finally { starting = ''; }
 	}
 </script>
 
-<svelte:head><title>Meine Decks — eigen.beam</title></svelte:head>
+<svelte:head><title>{t('common.my_decks')} — eigen.beam</title></svelte:head>
 
 <main>
 	<header>
 		<a class="mono tag" href="/">← EIGEN.BEAM</a>
-		<a class="new" href="/new">Neues Deck</a>
+		<a class="new" href="/new">{t('common.new_deck')}</a>
 	</header>
 
 	<section class="hero">
 		<div>
-			<div class="mono eyebrow">ACCOUNT</div>
-			<h1>Deine Präsentationen.</h1>
-			<p>{data.session ? `Angemeldet als ${data.session.email}.` : 'Diese Decks gehören schon dir. Magic-Link sichert deine Library dauerhaft, ohne den schnellen Live-Start zu blockieren.'}</p>
-			<div class="hero-actions"><a class="primary-link" href="/new">Import Deck</a><button class="ghost-link" type="button" onclick={openLibrary}>Library öffnen</button></div>
+			<div class="mono eyebrow">{t('account.kicker')}</div>
+			<h1>{t('account.title')}</h1>
+			<p>{data.session ? t('account.signed_in_as', { email: data.session.email }) : t('account.hero_guest')}</p>
+			<div class="hero-actions"><a class="primary-link" href="/new">{t('account.import')}</a><button class="ghost-link" type="button" onclick={openLibrary}>{t('account.open_library')}</button></div>
 		</div>
 	</section>
 
 	{#if data.auth === 'ok'}
-		<p class="notice">Angemeldet. {data.claimed > 0 ? `${data.claimed} Deck${data.claimed === 1 ? '' : 's'} übernommen.` : 'Keine neuen lokalen Decks zu übernehmen.'}</p>
+		<p class="notice">{t('account.auth_ok')} {data.claimed > 0 ? (data.claimed === 1 ? t('account.claimed_one') : t('account.claimed', { count: data.claimed })) : t('account.claimed_none')}</p>
 	{:else if data.auth === 'invalid'}
-		<p class="notice err">Login-Link ungültig oder abgelaufen.</p>
+		<p class="notice err">{t('account.auth_invalid')}</p>
 	{/if}
 
 	<section id="library-remote" class="library" class:highlight={libraryHighlighted} bind:this={librarySection} tabindex="-1">
 		<div class="library-head">
-			<div><span class="mono eyebrow">LIBRARY REMOTE</span><h2>Eigene Decks</h2></div>
-			<span>{decks.length} Deck{decks.length === 1 ? '' : 's'}</span>
+			<div><span class="mono eyebrow">{t('account.library_remote')}</span><h2>{t('account.own_decks')}</h2></div>
+			<span>{decks.length === 1 ? t('account.deck_count_one') : t('account.deck_count', { count: decks.length })}</span>
 		</div>
 		{#if decks.length === 0}
 			<div class="empty">
-				<h3>Noch kein gespeichertes Deck.</h3>
-				<p>Importiere PDF/PPTX/Voice oder starte mit einem Template. Das erste Deck wird automatisch diesem Gerät zugeordnet.</p>
-				<a href="/new">Import Deck →</a>
+				<h3>{t('account.no_decks')}</h3>
+				<p>{t('account.no_decks_body')}</p>
+				<a href="/new">{t('account.import')} →</a>
 			</div>
 		{:else}
 			<div class="cards">
@@ -164,29 +167,29 @@
 						<div>
 							<span class="mono">{deck.slideCount} Slides · {visibilityLabel(deck.visibility)}</span>
 							<h3>{deck.title}</h3>
-							<p>Aktualisiert {formatDate(deck.updatedAt)}</p>
+							<p>{t('account.updated', { date: formatDate(deck.updatedAt) })}</p>
 						</div>
 						<div class="quickstart">
-							<button class="live" disabled={starting === deck.id} onclick={() => startDeck(deck.id)}>{starting === deck.id ? 'Starte …' : 'Live starten →'}</button>
-							{#if deck.editUrl}<a href={deck.editUrl}>Bearbeiten</a>{/if}
+							<button class="live" disabled={starting === deck.id} onclick={() => startDeck(deck.id)}>{starting === deck.id ? t('account.starting') : t('account.live_start')}</button>
+							{#if deck.editUrl}<a href={deck.editUrl}>{t('common.edit')}</a>{/if}
 						</div>
 						<div class="sharing">
-							<label>Sichtbarkeit
+						<label>{t('account.visibility')}
 								<select value={deck.visibility} disabled={sharing === deck.id} onchange={(e) => handleVisibilityChange(deck.id, e)}>
-									<option value="private">Privat</option>
-									<option value="link">Link sichtbar</option>
-									{#if data.profile}<option value="team">Team sichtbar</option>{/if}
+								<option value="private">{t('common.private')}</option>
+								<option value="link">{t('common.link_visible')}</option>
+								{#if data.profile}<option value="team">{t('common.team_visible')}</option>{/if}
 								</select>
 							</label>
-							<button class="more" aria-expanded={expandedDeck === deck.id} onclick={() => (expandedDeck = expandedDeck === deck.id ? '' : deck.id)}>{expandedDeck === deck.id ? 'Weniger' : 'Mehr'}</button>
+							<button class="more" aria-expanded={expandedDeck === deck.id} onclick={() => (expandedDeck = expandedDeck === deck.id ? '' : deck.id)}>{expandedDeck === deck.id ? t('account.less') : t('account.more')}</button>
 						</div>
 						{#if expandedDeck === deck.id}
-							<div class="actions deck-details" aria-label={`Mehr Aktionen für ${deck.title}`}>
-								<a class="secondary" href={deck.shareUrl}>Share</a>
-								<a class="secondary" href={deck.recapUrl}>Recap</a>
-								<a class="secondary" href={`/api/decks/${deck.id}/export/md`}>Export .md</a>
-								<a class="secondary" href={`/api/decks/${deck.id}/export/json`}>Export .json</a>
-								<button class="danger" disabled={deleting === deck.id} onclick={() => deleteDeck(deck.id, deck.title)}>{deleting === deck.id ? 'Lösche …' : 'Löschen'}</button>
+							<div class="actions deck-details" aria-label={t('account.more_actions', { title: deck.title })}>
+								<a class="secondary" href={deck.shareUrl}>{t('common.share')}</a>
+								<a class="secondary" href={deck.recapUrl}>{t('common.recap')}</a>
+								<a class="secondary" href={`/api/decks/${deck.id}/export/md`}>{t('common.export_md')}</a>
+								<a class="secondary" href={`/api/decks/${deck.id}/export/json`}>{t('common.export_json')}</a>
+								<button class="danger" disabled={deleting === deck.id} onclick={() => deleteDeck(deck.id, deck.title)}>{deleting === deck.id ? t('account.deleting') : t('common.delete')}</button>
 							</div>
 						{/if}
 					</article>
@@ -197,36 +200,38 @@
 
 	<section class="auth-card account-claim">
 		{#if data.session && data.profile}
-			<span class="mono">ANGEMELDET</span>
+			<span class="mono">{t('account.signed_in')}</span>
 			<strong>{data.profile.email}</strong>
-			<p>Team-light: <b>{data.profile.teamLabel}</b>. Decks mit „Team sichtbar" erscheinen für Accounts derselben Email-Domain.</p>
-			<button class="ghost" onclick={logout}>Abmelden</button>
+			<p>{t('account.team_body', { team: data.profile.teamLabel })}</p>
+			<button class="ghost" onclick={logout}>{t('account.logout')}</button>
 		{:else}
-			<span class="mono">LIBRARY SICHERN</span>
-			<strong>Behalte deine Decks, auch wenn du das Gerät wechselst.</strong>
-			<p>Du hast schon Wert aufgebaut. Sende dir einen Magic-Link, um diese Library dauerhaft zu sichern.</p>
+			<span class="mono">{t('account.secure_library')}</span>
+			<strong>{t('account.secure_title')}</strong>
+			<p>{t('account.secure_body')}</p>
 			<form onsubmit={(e) => { e.preventDefault(); login(); }}>
-				<input bind:value={email} type="email" placeholder="du@example.com" required />
-				<button disabled={sending}>{sending ? 'Sende …' : 'Library sichern'}</button>
+				<label for="account-email">{t('account.email_label')}</label>
+				<input id="account-email" bind:value={email} type="email" autocomplete="email" placeholder="you@example.com" required />
+				<button disabled={sending}>{sending ? t('account.sending') : t('account.secure_action')}</button>
 			</form>
 		{/if}
-		{#if msg}<p class="msg" class:err>{msg}</p>{/if}
+		{#if msg}<p class="msg" class:err aria-live="polite">{msg}</p>{/if}
+		<div class="account-language"><strong>{t('account.locale_title')}</strong><LocaleSwitcher /></div>
 	</section>
 
 	{#if data.profile}
 		<section class="library">
 			<div class="library-head">
 				<h2>Team {data.profile.teamLabel}</h2>
-				<span>{teamDecks.length} freigegeben</span>
+				<span>{t('account.team_shared', { count: teamDecks.length })}</span>
 			</div>
 			{#if teamDecks.length === 0}
-				<div class="empty compact"><h3>Noch keine Team-Decks.</h3><p>Wenn jemand mit derselben Email-Domain ein Deck auf „Team sichtbar" stellt, landet es hier.</p></div>
+				<div class="empty compact"><h3>{t('account.no_team_decks')}</h3><p>{t('account.no_team_decks_body')}</p></div>
 			{:else}
 				<div class="cards">
 					{#each teamDecks as deck}
 						<article>
-							<div><span class="mono">{deck.slideCount} Slides · Team sichtbar</span><h3>{deck.title}</h3><p>Aktualisiert {formatDate(deck.updatedAt)}</p></div>
-							<div class="actions"><a href={deck.shareUrl}>Ansehen</a><a class="secondary" href={`/api/decks/${deck.id}/export/md`}>Export .md</a><a class="secondary" href={`/api/decks/${deck.id}/export/json`}>Export .json</a><button class="ghost" disabled={cloning === deck.id} onclick={() => cloneDeck(deck.id)}>{cloning === deck.id ? 'Kopiere …' : 'Kopie erstellen'}</button></div>
+							<div><span class="mono">{deck.slideCount} Slides · {t('common.team_visible')}</span><h3>{deck.title}</h3><p>{t('account.updated', { date: formatDate(deck.updatedAt) })}</p></div>
+							<div class="actions"><a href={deck.shareUrl}>{t('common.view')}</a><a class="secondary" href={`/api/decks/${deck.id}/export/md`}>{t('common.export_md')}</a><a class="secondary" href={`/api/decks/${deck.id}/export/json`}>{t('common.export_json')}</a><button class="ghost" disabled={cloning === deck.id} onclick={() => cloneDeck(deck.id)}>{cloning === deck.id ? t('account.cloning') : t('account.clone')}</button></div>
 						</article>
 					{/each}
 				</div>
@@ -252,6 +257,9 @@
 	.auth-card { border:1px solid var(--hair); border-radius:24px; padding:18px; display:flex; flex-direction:column; gap:14px; background:color-mix(in srgb, var(--accent) 8%, transparent); }
 	.account-claim { margin-top:18px; }
 	.auth-card strong { font-size:22px; line-height:1.1; }
+	.auth-card form label { color:var(--fg); font-size:13px; font-weight:760; }
+	.account-language { border-top:1px solid var(--hair); padding-top:14px; display:grid; gap:8px; }
+	.account-language > strong { font-size:14px; }
 	form { display:grid; gap:8px; }
 	input, select { min-height:44px; border:1px solid var(--hair); border-radius:999px; background:var(--bg); color:var(--fg); padding:0 14px; font:inherit; }
 	form button { min-height:44px; }

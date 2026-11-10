@@ -1,5 +1,6 @@
 import type { PublicSlide } from './decks';
 import type { ReplayEvent, ReplaySnapshot } from './server/rooms';
+import { detectContentLocale, type Locale } from './i18n';
 
 export type SlideHeatmapClassification = 'quiet' | 'warm' | 'hot' | 'confusing';
 
@@ -25,6 +26,7 @@ export type SlideHeatmap = {
 };
 
 export function buildSlideHeatmap(replay: ReplaySnapshot): SlideHeatmap {
+	const locale = detectContentLocale(replay.slides);
 	const raw = (replay.slides as PublicSlide[]).map((slide, index) => {
 		const reactions = countEvents(replay.events, 'reaction', index);
 		const questions = countEvents(replay.events, 'question', index);
@@ -47,28 +49,29 @@ export function buildSlideHeatmap(replay: ReplaySnapshot): SlideHeatmap {
 			...slide,
 			intensity,
 			classification: classifySlide(slide.score, intensity, slide.questions, slide.bookmarks),
-			why: signalReason(slide.reactions, slide.questions, slide.bookmarks)
+			why: signalReason(slide.reactions, slide.questions, slide.bookmarks, locale)
 		};
 	});
 	const hottest = [...slides].sort((a, b) => b.score - a.score || a.index - b.index)[0];
 	const confusing = [...slides].filter((slide) => slide.questions > 0).sort((a, b) => b.questions - a.questions || b.score - a.score || a.index - b.index)[0];
 	const base = { id: replay.id, slides, hottest, confusing };
-	return { ...base, markdown: slideHeatmapMarkdown(base) };
+	return { ...base, markdown: slideHeatmapMarkdown(base, locale) };
 }
 
-export function slideHeatmapMarkdown(heatmap: Omit<SlideHeatmap, 'markdown'>): string {
+export function slideHeatmapMarkdown(heatmap: Omit<SlideHeatmap, 'markdown'>, locale: Locale = 'de'): string {
+	const de = locale === 'de';
 	const lines = [
 		'# Slide Heatmap',
 		'',
 		`Room: ${heatmap.id}`,
 		'',
-		'## Resonanz je Folie'
+		de ? '## Resonanz je Folie' : '## Response by slide'
 	];
 	for (const slide of heatmap.slides) {
 		lines.push(`- ${slide.label} „${slide.headline}“ — ${slide.intensity}% · ${slide.classification} · ${slide.why}`);
 	}
-	if (heatmap.hottest) lines.push('', `Heißeste Folie: ${heatmap.hottest.label} „${heatmap.hottest.headline}“.`);
-	if (heatmap.confusing) lines.push(`Meiste Fragen: ${heatmap.confusing.label} „${heatmap.confusing.headline}“.`);
+	if (heatmap.hottest) lines.push('', `${de ? 'Heißeste Folie' : 'Hottest slide'}: ${heatmap.hottest.label} “${heatmap.hottest.headline}”.`);
+	if (heatmap.confusing) lines.push(`${de ? 'Meiste Fragen' : 'Most questions'}: ${heatmap.confusing.label} “${heatmap.confusing.headline}”.`);
 	return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`;
 }
 
@@ -83,11 +86,12 @@ function classifySlide(score: number, intensity: number, questions: number, book
 	return 'warm';
 }
 
-function signalReason(reactions: number, questions: number, bookmarks: number): string {
+function signalReason(reactions: number, questions: number, bookmarks: number, locale: Locale): string {
+	const de = locale === 'de';
 	const parts = [
-		reactions ? `${reactions}× Reaktion` : '',
-		questions ? `${questions}× Frage` : '',
-		bookmarks ? `${bookmarks}× Merker` : ''
+		reactions ? `${reactions}× ${de ? 'Reaktion' : 'reaction'}` : '',
+		questions ? `${questions}× ${de ? 'Frage' : 'question'}` : '',
+		bookmarks ? `${bookmarks}× ${de ? 'Merker' : 'save'}` : ''
 	].filter(Boolean);
-	return parts.length ? parts.join(' · ') : 'keine Signale';
+	return parts.length ? parts.join(' · ') : (de ? 'keine Signale' : 'no signals');
 }

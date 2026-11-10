@@ -1,5 +1,6 @@
 import { parseDeck } from './deck-parse';
 import type { Slide } from './decks';
+import { createTranslator, type Locale } from './i18n';
 
 export type DeckReadyStatus = 'live_ready' | 'almost_ready' | 'needs_work';
 export type DeckQualityIssueKind =
@@ -23,7 +24,7 @@ export type DeckQualityIssue = {
 
 export type DeckReadyCheck = {
 	status: DeckReadyStatus;
-	label: 'Live-ready' | 'Fast live-ready' | 'Needs work';
+	label: string;
 	summary: string;
 	metrics: {
 		slideCount: number;
@@ -38,46 +39,47 @@ export type DeckReadyCheck = {
 const CTA_RE = /(nächster schritt|next step|cta|call to action|entscheidung|kontakt|demo|starten|loslegen|jetzt)/i;
 const DESKTOP_RE = /(agenda|appendix|backup|roadmap|q[1-4]|quartal|chart|diagramm|tabelle|matrix|excel|dashboard)/i;
 
-export function deckReadyCheck(slides: Slide[]): DeckReadyCheck {
+export function deckReadyCheck(slides: Slide[], locale: Locale = 'de'): DeckReadyCheck {
+	const t = createTranslator(locale);
 	const issues: DeckQualityIssue[] = [];
 	const denseSlideIndexes = new Set<number>();
 	const longHeadlineIndexes = new Set<number>();
 	let revealSlides = 0;
 
 	if (slides.length === 0) {
-		issues.push({ kind: 'empty_deck', severity: 'fix', message: 'Noch keine Folien erkannt.' });
+		issues.push({ kind: 'empty_deck', severity: 'fix', message: t('quality.empty') });
 	}
-	if (slides.length > 15) issues.push({ kind: 'too_many_slides', severity: 'fix', message: `${slides.length} Folien — für eine Phone-Session auf höchstens 15 kürzen.` });
-	if (slides.length > 0 && slides.length < 3) issues.push({ kind: 'too_few_slides', severity: 'warn', message: 'Sehr kurz — prüfe, ob Hook, Proof und nächster Schritt klar sind.' });
+	if (slides.length > 15) issues.push({ kind: 'too_many_slides', severity: 'fix', message: t('quality.too_many', { count: slides.length }) });
+	if (slides.length > 0 && slides.length < 3) issues.push({ kind: 'too_few_slides', severity: 'warn', message: t('quality.too_few') });
 
 	slides.forEach((slide, index) => {
 		const headline = slide.headline?.trim() ?? '';
 		const body = slide.body?.trim() ?? '';
 		const text = [headline, body, slide.eyebrow, slide.metric, slide.quote].filter(Boolean).join(' ');
 		if (!headline || (headline.length < 3 && !body && !slide.image)) {
-			issues.push({ kind: 'slide_empty', severity: 'fix', slideIndex: index, message: `F${index + 1}: fast leer — eine klare Headline setzen.` });
+			issues.push({ kind: 'slide_empty', severity: 'fix', slideIndex: index, message: t('quality.slide_empty', { slide: index + 1 }) });
 		}
 		if (headline.length > 68) {
 			longHeadlineIndexes.add(index);
-			issues.push({ kind: 'headline_long', severity: 'fix', slideIndex: index, message: `F${index + 1}: Headline zu lang für Phones.` });
+			issues.push({ kind: 'headline_long', severity: 'fix', slideIndex: index, message: t('quality.headline_long', { slide: index + 1 }) });
 		}
 		if (body.length > 170 || wordCount(body) > 28) {
 			denseSlideIndexes.add(index);
-			issues.push({ kind: 'body_dense', severity: 'fix', slideIndex: index, message: `F${index + 1}: zu viel Text — auf einen Satz oder Reveal trimmen.` });
+			issues.push({ kind: 'body_dense', severity: 'fix', slideIndex: index, message: t('quality.body_dense', { slide: index + 1 }) });
 		}
 		if ((slide.reveal?.length ?? 0) > 0) revealSlides++;
 		if (text.length > 240 || DESKTOP_RE.test(text)) {
-			issues.push({ kind: 'desktop_suspect', severity: 'warn', slideIndex: index, message: `F${index + 1}: wirkt wie Desktop-/Report-Material — im Import kürzen.` });
+			issues.push({ kind: 'desktop_suspect', severity: 'warn', slideIndex: index, message: t('quality.desktop', { slide: index + 1 }) });
 		}
 	});
 
 	const last = slides[slides.length - 1];
 	const lastText = [last?.eyebrow, last?.headline, last?.body].filter(Boolean).join(' ');
 	if (slides.length > 0 && !CTA_RE.test(lastText)) {
-		issues.push({ kind: 'missing_cta', severity: 'warn', message: 'Letzte Folie hat keinen klaren nächsten Schritt.' });
+		issues.push({ kind: 'missing_cta', severity: 'warn', message: t('quality.cta_missing') });
 	}
 	if (slides.length >= 4 && revealSlides === 0) {
-		issues.push({ kind: 'reveal_missing', severity: 'warn', message: 'Keine Reveal-Punkte — ein Live-Talk profitiert von 1–2 kontrollierten Enthüllungen.' });
+		issues.push({ kind: 'reveal_missing', severity: 'warn', message: t('quality.reveal_missing') });
 	}
 
 	const fixIssues = issues.filter((issue) => issue.severity === 'fix').length;
@@ -90,27 +92,28 @@ export function deckReadyCheck(slides: Slide[]): DeckReadyCheck {
 
 	return {
 		status,
-		label: status === 'live_ready' ? 'Live-ready' : status === 'almost_ready' ? 'Fast live-ready' : 'Needs work',
-		summary: `${slides.length} ${slides.length === 1 ? 'Folie' : 'Folien'} · ${denseSlideIndexes.size} zu dicht · ${longHeadlineIndexes.size} lange Headlines · ${revealSlides} Reveal-Momente`,
+		label: status === 'live_ready' ? t('quality.label_ready') : status === 'almost_ready' ? t('quality.label_almost') : t('quality.label_work'),
+		summary: t('quality.summary', { slides: `${slides.length} ${slides.length === 1 ? t('common.slide') : t('common.slides')}`, dense: denseSlideIndexes.size, long: longHeadlineIndexes.size, reveal: revealSlides }),
 		metrics: { slideCount: slides.length, denseSlides: denseSlideIndexes.size, longHeadlines: longHeadlineIndexes.size, revealSlides },
 		issues,
 		suggestedFixes: Array.from(new Set(suggestedFixes))
 	};
 }
 
-export function applyQualityFix(source: string, fix: DeckQualityFix): string {
-	if (fix === 'add_cta') return addCtaSlide(source);
+export function applyQualityFix(source: string, fix: DeckQualityFix, locale: Locale = 'de'): string {
+	if (fix === 'add_cta') return addCtaSlide(source, locale);
 	if (fix === 'suggest_reveal') return suggestReveal(source);
 	return shortenSource(source);
 }
 
-function addCtaSlide(source: string): string {
+function addCtaSlide(source: string, locale: Locale): string {
 	const trimmed = source.trim();
 	const slides = parseDeck(trimmed);
 	const last = slides[slides.length - 1];
 	const lastText = [last?.eyebrow, last?.headline, last?.body].filter(Boolean).join(' ');
 	if (CTA_RE.test(lastText)) return source;
-	const cta = 'Next\n# Nächster Schritt\nWas nach dieser Session konkret passieren soll.';
+	const t = createTranslator(locale);
+	const cta = `Next\n# ${t('generated.cta_eyebrow')}\n${t('generated.cta_headline')}`;
 	return trimmed ? `${trimmed}\n\n---\n\n${cta}` : cta;
 }
 

@@ -4,11 +4,12 @@ import { authSigningSecret, verifyPinUnlockToken } from '$lib/server/auth';
 import { getReplayPersistent } from '$lib/server/rooms';
 import { buildFollowUpPack } from '$lib/follow-up-pack';
 import { canonicalPublicOrigin } from '$lib/server/origin';
+import { apiError } from '$lib/server/api-error';
 
-export const GET: RequestHandler = async ({ params, cookies, url }) => {
+export const GET: RequestHandler = async ({ params, cookies, url, locals }) => {
 	const replay = await getReplayPersistent(params.id);
-	if (!replay) return json({ error: 'not_found' }, { status: 404 });
-	if (replay.protected && !verifyPinUnlockToken(cookies.get(`eb_pin_${params.id}`), params.id, authSigningSecret())) return json({ error: 'forbidden' }, { status: 403 });
+	if (!replay) return apiError({ locals }, 'replay_not_found', 404);
+	if (replay.protected && !verifyPinUnlockToken(cookies.get(`eb_pin_${params.id}`), params.id, authSigningSecret())) return apiError({ locals }, 'replay_pin_required', 403);
 	const pack = buildFollowUpPack(replay, { baseUrl: canonicalPublicOrigin(url) });
 	if (url.searchParams.get('format') === 'md') {
 		return new Response(pack.markdown, {

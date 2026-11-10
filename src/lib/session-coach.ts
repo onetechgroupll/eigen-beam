@@ -3,6 +3,7 @@ import { buildDeckV2Draft } from './deck-v2-draft';
 import { buildFollowUpPack } from './follow-up-pack';
 import { buildSessionSummary } from './session-summary';
 import { buildSlideHeatmap } from './slide-heatmap';
+import { detectContentLocale, type Locale } from './i18n';
 
 export type SessionCoachActionKind = 'clarify' | 'reuse' | 'followup' | 'rehearse';
 export type SessionCoachPriority = 'high' | 'medium' | 'low';
@@ -22,6 +23,8 @@ export type SessionCoach = {
 };
 
 export function buildSessionCoach(replay: ReplaySnapshot): SessionCoach {
+	const locale = detectContentLocale(replay.slides);
+	const de = locale === 'de';
 	const summary = buildSessionSummary(replay);
 	const heatmap = buildSlideHeatmap(replay);
 	const deckV2 = buildDeckV2Draft(replay);
@@ -31,37 +34,38 @@ export function buildSessionCoach(replay: ReplaySnapshot): SessionCoach {
 		actions.push({
 			kind: 'clarify',
 			priority: 'high',
-			label: `${heatmap.confusing.label} früher erklären`,
-			detail: `Vor „${heatmap.confusing.headline}“ eine kurze Begriff-/Kontextfolie einsetzen. Der V2-Draft enthält dafür bereits eine Klarstellungsfolie.`
+			label: de ? `${heatmap.confusing.label} früher erklären` : `Explain ${heatmap.confusing.label} earlier`,
+			detail: de ? `Vor „${heatmap.confusing.headline}“ eine kurze Begriff-/Kontextfolie einsetzen. Der V2-Draft enthält dafür bereits eine Klarstellungsfolie.` : `Add a short term/context slide before “${heatmap.confusing.headline}”. The V2 draft already includes one.`
 		});
 	}
 	if (heatmap.hottest && heatmap.hottest.score > 0) {
 		actions.push({
 			kind: 'reuse',
 			priority: actions.length ? 'medium' : 'high',
-			label: `${heatmap.hottest.label} als Proof-Moment behalten`,
-			detail: `„${heatmap.hottest.headline}“ war die stärkste Folie (${heatmap.hottest.why}). Nicht kürzen — eher als Beweisanker nutzen.`
+			label: de ? `${heatmap.hottest.label} als Proof-Moment behalten` : `Keep ${heatmap.hottest.label} as a proof moment`,
+			detail: de ? `„${heatmap.hottest.headline}“ war die stärkste Folie (${heatmap.hottest.why}). Nicht kürzen — eher als Beweisanker nutzen.` : `“${heatmap.hottest.headline}” was the strongest slide (${heatmap.hottest.why}). Keep it as an evidence anchor.`
 		});
 	}
 	actions.push({
 		kind: 'followup',
 		priority: summary.totals.engagements > 0 ? 'medium' : 'low',
-		label: 'Follow-up heute noch senden',
-		detail: `Den Follow-up-Pack mit Replay/Summary/Takeaway verschicken. Betreff: „${followUp.subject}“.`,
+		label: de ? 'Follow-up heute noch senden' : 'Send the follow-up today',
+		detail: de ? `Den Follow-up-Pack mit Replay/Summary/Takeaway verschicken. Betreff: „${followUp.subject}“.` : `Send the follow-up pack with replay, summary, and takeaway. Subject: “${followUp.subject}”.`,
 	});
 	actions.push({
 		kind: 'rehearse',
 		priority: 'low',
-		label: 'V2-Draft einmal laut testen',
-		detail: `${deckV2.slides.length} Folien im V2-Draft durchgehen; bei jeder Folie nur eine Aussage stehen lassen.`
+		label: de ? 'V2-Draft einmal laut testen' : 'Rehearse the V2 draft aloud',
+		detail: de ? `${deckV2.slides.length} Folien im V2-Draft durchgehen; bei jeder Folie nur eine Aussage stehen lassen.` : `Review all ${deckV2.slides.length} slides in the V2 draft and keep one statement per slide.`
 	});
 	const normalized = actions.sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority));
-	const coach = { id: replay.id, headline: 'Next Talk Checklist', actions: normalized };
-	return { ...coach, markdown: sessionCoachMarkdown(coach) };
+	const coach = { id: replay.id, headline: de ? 'Checkliste für den nächsten Talk' : 'Next Talk Checklist', actions: normalized };
+	return { ...coach, markdown: sessionCoachMarkdown(coach, locale) };
 }
 
-export function sessionCoachMarkdown(coach: Omit<SessionCoach, 'markdown'>): string {
-	const lines = ['# Session Coach', '', `Room: ${coach.id}`, '', `## ${coach.headline}`];
+export function sessionCoachMarkdown(coach: Omit<SessionCoach, 'markdown'>, locale: Locale = 'en'): string {
+	const de = locale === 'de';
+	const lines = [de ? '# Session-Coach' : '# Session Coach', '', `${de ? 'Raum' : 'Room'}: ${coach.id}`, '', `## ${coach.headline}`];
 	for (const action of coach.actions) lines.push(`- [${action.priority}] ${action.label}: ${action.detail}`);
 	return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`;
 }

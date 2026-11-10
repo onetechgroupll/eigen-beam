@@ -2,17 +2,19 @@
 	import { onMount } from 'svelte';
 	import { fieldTestChecklist, liveStatsDashboard, type AudienceStats } from '$lib/stats-dashboard';
 	import { liveSentimentLabel, reopenInsight, replaySentiment, applySentimentSignal, type SentimentPoint } from '$lib/polish';
+	import { useI18n } from '$lib/i18n/context';
 
 	let { data } = $props();
+	const { locale, t } = useI18n();
 	const initial = <T>(read: () => T): T => read();
 	let stats = $state<AudienceStats>(initial(() => data.stats));
 	let current = $state(initial(() => data.current));
 	let sentimentPoints = $state<SentimentPoint[]>(initial(() => replaySentiment([], data.slideCount)));
 	let viewerUrl = $state('');
-	let dashboard = $derived(liveStatsDashboard(stats));
-	let checklist = $derived(fieldTestChecklist(stats, viewerUrl));
-	let reopen = $derived(reopenInsight(stats));
-	let sentiment = $derived(liveSentimentLabel(sentimentPoints));
+	let dashboard = $derived(liveStatsDashboard(stats, Date.now(), locale));
+	let checklist = $derived(fieldTestChecklist(stats, viewerUrl, locale));
+	let reopen = $derived(reopenInsight(stats, locale));
+	let sentiment = $derived(liveSentimentLabel(sentimentPoints, locale));
 
 	onMount(() => {
 		viewerUrl = `${location.origin}/v/${data.id}`;
@@ -44,30 +46,30 @@
 
 <main>
 	<header>
-		<a href={`/present/${data.id}`}>← Presenter</a>
-		<span class="mono">LIVE STATS · Raum {data.id}</span>
+		<a href={`/present/${data.id}`}>← {t('stats.back_presenter')}</a>
+		<span class="mono">{t('stats.live_room', { id: data.id })}</span>
 	</header>
 
 	<section class="hero">
 		<div>
-			<div class="mono tag">FIELD TEST DASHBOARD</div>
-			<h1>Siehst du, ob der Raum wirklich mitkommt.</h1>
-			<p>{dashboard.presenceLabel} · {dashboard.durationMinutes} min live · Resonanz: {sentiment}</p>
+			<div class="mono tag">{t('stats.dashboard_kicker')}</div>
+			<h1>{t('stats.title')}</h1>
+			<p>{t('stats.meta', { presence: dashboard.presenceLabel, minutes: dashboard.durationMinutes, sentiment })}</p>
 		</div>
-		<a class="viewer" href={viewerUrl}>{viewerUrl || 'Viewer-Link lädt …'}</a>
+		<a class="viewer" href={viewerUrl}>{viewerUrl || t('stats.viewer_loading')}</a>
 	</section>
 
-	<section class="kpis" aria-label="Live-Kennzahlen">
-		<article><strong>{stats.currentViewers}</strong><span>gerade dabei</span></article>
-		<article><strong>{stats.peakConcurrent}</strong><span>Peak concurrent</span></article>
-		<article><strong>{stats.joins}</strong><span>Joins gesamt</span></article>
-		<article class:returning={reopen.tone !== 'quiet'}><strong>{dashboard.reopenRate}%</strong><span>Re-Open-Rate</span></article>
-		<article><strong>{dashboard.engagements}</strong><span>Signale</span></article>
+	<section class="kpis" aria-label={t('stats.live_metrics')}>
+		<article><strong>{stats.currentViewers}</strong><span>{t('stats.live_now')}</span></article>
+		<article><strong>{stats.peakConcurrent}</strong><span>{t('stats.peak')}</span></article>
+		<article><strong>{stats.joins}</strong><span>{t('stats.total_joins')}</span></article>
+		<article class:returning={reopen.tone !== 'quiet'}><strong>{dashboard.reopenRate}%</strong><span>{t('stats.reopen_rate')}</span></article>
+		<article><strong>{dashboard.engagements}</strong><span>{t('stats.signals')}</span></article>
 	</section>
 
 	<section class="grid">
 		<div class="panel">
-			<h2>Field-Test-Checkliste</h2>
+			<h2>{t('stats.checklist')}</h2>
 			{#each checklist as item}
 				<div class={`check ${item.status}`}>
 					<span>{item.status === 'good' ? '✓' : item.status === 'risk' ? '!' : '•'}</span>
@@ -77,12 +79,12 @@
 		</div>
 
 		<div class="panel">
-			<h2>Engagement</h2>
+			<h2>{t('stats.engagement')}</h2>
 			<div class="bars">
-				<div><span style={`--w:${Math.min(100, stats.reactions * 12)}%`}></span><strong>👍 Reaktionen</strong><em>{stats.reactions}</em></div>
-				<div><span style={`--w:${Math.min(100, stats.questions * 20)}%`}></span><strong>Fragen</strong><em>{stats.questions}</em></div>
-				<div><span style={`--w:${Math.min(100, stats.bookmarks * 20)}%`}></span><strong>Merker</strong><em>{stats.bookmarks}</em></div>
-				<div><span style={`--w:${Math.min(100, stats.reopens * 18)}%`}></span><strong>Re-Opens</strong><em>{stats.reopens}</em></div>
+				<div><span style={`--w:${Math.min(100, stats.reactions * 12)}%`}></span><strong>👍 {t('replay.reactions')}</strong><em>{stats.reactions}</em></div>
+				<div><span style={`--w:${Math.min(100, stats.questions * 20)}%`}></span><strong>{t('common.questions')}</strong><em>{stats.questions}</em></div>
+				<div><span style={`--w:${Math.min(100, stats.bookmarks * 20)}%`}></span><strong>{t('present.bookmarks')}</strong><em>{stats.bookmarks}</em></div>
+				<div><span style={`--w:${Math.min(100, stats.reopens * 18)}%`}></span><strong>{t('common.reopens')}</strong><em>{stats.reopens}</em></div>
 			</div>
 			<p class="summary">{reopen.label}: {reopen.detail}</p>
 		</div>

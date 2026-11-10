@@ -2,8 +2,10 @@
 	import { goto } from '$app/navigation';
 	import SlideView from '$lib/components/SlideView.svelte';
 	import { conversionCta } from '$lib/polish';
+	import { useI18n } from '$lib/i18n/context';
 	let { data } = $props();
-	const cta = conversionCta('share');
+	const { locale, t } = useI18n();
+	const cta = conversionCta('share', locale);
 	let cloning = $state(false);
 	let msg = $state('');
 	async function cloneDeck() {
@@ -11,30 +13,30 @@
 		try {
 			const res = await fetch(`/api/decks/${data.deck.id}/clone`, { method: 'POST' });
 			const j = await res.json().catch(() => ({}));
-			if (!res.ok) { msg = j.message ?? 'Deck konnte nicht geklont werden.'; return; }
+			if (!res.ok) { msg = j.message ?? t('share.clone_failed'); return; }
 			await goto(`/edit/${j.id}`);
 		} finally { cloning = false; }
 	}
 </script>
 
-<svelte:head><title>{data.deck.title} teilen — eigen.beam</title></svelte:head>
+<svelte:head><title>{t('share.page_title', { title: data.deck.title })}</title></svelte:head>
 
 <main>
-	<header><a href="/">← eigen.beam</a><a href="/account">Meine Decks</a></header>
+	<header><a href="/">← eigen.beam</a><a href="/account">{t('common.my_decks')}</a></header>
 	<section class="hero">
 		<div>
-			<div class="mono tag">SHARE</div>
+			<div class="mono tag">{t('common.share')}</div>
 			<h1>{data.deck.title}</h1>
-			<p>{data.deck.slides.length} Slides · {data.deck.visibility === 'team' ? 'Team sichtbar' : 'Link sichtbar'} · public-safe ohne Speaker Notes.</p>
+			<p>{t(data.deck.slides.length === 1 ? 'share.meta_one' : 'share.meta_other', { count: data.deck.slides.length, visibility: data.deck.visibility === 'team' ? t('common.team_visible') : t('common.link_visible') })}</p>
 		</div>
 		<div class="hero-card">
 			<span class="mono">{cta.kicker}</span>
 			<strong>{cta.title}</strong>
 			<p>{cta.body}</p>
-			<button onclick={cloneDeck} disabled={cloning}>{cloning ? 'Kopiere …' : cta.primary}</button>
+			<button onclick={cloneDeck} disabled={cloning}>{cloning ? t('account.cloning') : cta.primary}</button>
 			<div class="export-links">
-				<a href={`/api/decks/${data.deck.id}/export/md`}>Markdown exportieren</a>
-				<a href={`/api/decks/${data.deck.id}/export/json`}>JSON exportieren</a>
+				<a href={`/api/decks/${data.deck.id}/export/md`}>{t('share.export_markdown')}</a>
+				<a href={`/api/decks/${data.deck.id}/export/json`}>{t('share.export_json')}</a>
 			</div>
 			{#if msg}<p>{msg}</p>{/if}
 		</div>

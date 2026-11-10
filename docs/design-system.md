@@ -51,6 +51,10 @@ The lime accent is used sparingly: filled progress segments and the LIVE dot. It
 - `clamp()` typography and `safe-area-inset` padding; design for roughly 85% of the viewport because of mobile browser chrome; phone to tablet without clipping.
 - Touch targets at least 44px. Keep text out of the edge tap zones.
 - Colour is never the only carrier of meaning.
+- Dialogs and sheets use a modal focus boundary: move focus inside on open, close on `Escape`, make the background inert, and restore focus to the trigger on close.
+- Every input has a persistent visible label; placeholders are examples, never labels. Dynamic confirmation and session state changes use `aria-live="polite"` unless the message is an error that requires `role="alert"`.
+- Saved/done states have text as well as colour. Keyboard focus uses a 3px ring with at least 3:1 contrast in both themes.
+- Check every surface at 320px width and 200% zoom in both English and German. Long labels wrap instead of shrinking touch targets below 44px or obscuring slide content.
 
 ## README graphics
 

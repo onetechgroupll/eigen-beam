@@ -1,6 +1,8 @@
 <script lang="ts">
 	import DeckEditor from '$lib/components/DeckEditor.svelte';
+	import { useI18n } from '$lib/i18n/context';
 	let { data } = $props();
+	const { t } = useI18n();
 </script>
 
 <svelte:head>
@@ -10,12 +12,12 @@
 
 {#if data.claim}
 	<main class="claim">
-		<div class="mono tag">DECK ÜBERNEHMEN</div>
+		<div class="mono tag">{t('claim.kicker')}</div>
 		<h1>{data.title}</h1>
-		<p>{data.slideCount} {data.slideCount === 1 ? 'Folie' : 'Folien'}, per MCP angelegt. Übernimm das Deck, um es zu bearbeiten und live zu starten. Danach gehört es diesem Browser bzw. deinem Account.</p>
+		<p>{t('claim.body', { count: data.slideCount, slides: data.slideCount === 1 ? t('common.slide') : t('common.slides') })}</p>
 		<form method="POST" action="?/claim">
 			<input type="hidden" name="claim" value={data.token} />
-			<button type="submit">Deck übernehmen</button>
+			<button type="submit">{t('claim.action')}</button>
 		</form>
 	</main>
 {:else}

@@ -77,6 +77,10 @@ jobs:
         if: steps.changes.outputs.docs_only != 'true'
         run: bun run check
 
+      - name: I18n catalog and literal guard
+        if: steps.changes.outputs.docs_only != 'true'
+        run: bun run check:i18n
+
       - name: Repository verification
         if: steps.changes.outputs.docs_only != 'true'
         run: bun run verify:c1a

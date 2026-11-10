@@ -4,10 +4,13 @@
 	import { parseDeck } from '$lib/deck-parse';
 	import { TEMPLATES } from '$lib/decks';
 	import SlideView from '$lib/components/SlideView.svelte';
+	import { useI18n } from '$lib/i18n/context';
+	import { detectContentLocale } from '$lib/i18n';
 
 	type Props = { mode: 'new' | 'edit'; id?: string; initialTitle?: string; initialSource?: string };
 	let { mode, id = '', initialTitle = '', initialSource = '' }: Props = $props();
 	const initial = <T>(read: () => T): T => read();
+	const { locale, t } = useI18n();
 
 	let title = $state(initial(() => initialTitle));
 	let source = $state(initial(() => initialSource));
@@ -18,25 +21,25 @@
 	let safeIdx = $derived(count ? Math.min(Math.max(pidx, 0), count - 1) : 0);
 	let preview = $derived(count ? slides[safeIdx] : null);
 	let effectiveTitle = $derived(title.trim() || slides[0]?.headline?.trim() || 'Mobile Session');
-	let quality = $derived(deckReadyCheck(slides));
+	let quality = $derived(deckReadyCheck(slides, locale));
 	let readyItems = $derived([
-		{ label: 'Mobile Format vorbereitet', done: true },
-		{ label: count ? `${count} Slides erkannt` : 'Material reinwerfen', done: count > 0 },
-		{ label: quality.metrics.denseSlides === 0 && quality.metrics.longHeadlines === 0 ? 'Lesbarkeit okay' : 'Lesbarkeit schärfen', done: count > 0 && quality.metrics.denseSlides === 0 && quality.metrics.longHeadlines === 0 },
-		{ label: 'Presenter Remote bereit', done: count > 0 },
-		{ label: quality.issues.some((issue) => issue.kind === 'missing_cta') ? 'Klarer nächster Schritt fehlt' : 'Nächster Schritt klar', done: count > 0 && !quality.issues.some((issue) => issue.kind === 'missing_cta') }
+		{ label: t('editor.mobile_format'), done: true },
+		{ label: count ? t('editor.slides_detected', { count }) : t('editor.add_material'), done: count > 0 },
+		{ label: quality.metrics.denseSlides === 0 && quality.metrics.longHeadlines === 0 ? t('editor.readable') : t('editor.improve_readability'), done: count > 0 && quality.metrics.denseSlides === 0 && quality.metrics.longHeadlines === 0 },
+		{ label: t('editor.remote_ready'), done: count > 0 },
+		{ label: quality.issues.some((issue) => issue.kind === 'missing_cta') ? t('editor.cta_missing') : t('editor.cta_ready'), done: count > 0 && !quality.issues.some((issue) => issue.kind === 'missing_cta') }
 	]);
 	let readyDone = $derived(readyItems.filter((item) => item.done).length);
-	let readyLabel = $derived(`Live-ready: ${readyDone} / ${readyItems.length}`);
+	let readyLabel = $derived(t('editor.live_ready', { done: readyDone, total: readyItems.length }));
 
 	let saving = $state(false);
 	let starting = $state(false);
-	let launchLabel = $derived(starting ? 'Starte …' : count ? `${count} ${count === 1 ? 'Folie' : 'Folien'} live starten →` : 'Material reinwerfen →');
-	let saveLabel = $derived(saving ? 'Sichere …' : mode === 'new' ? 'Deck sichern' : 'Sichern');
+	let launchLabel = $derived(starting ? t('account.starting') : count ? t('editor.start_slides', { count, slides: count === 1 ? t('common.slide') : t('common.slides') }) : `${t('editor.add_material')} →`);
+	let saveLabel = $derived(saving ? t('editor.saving') : mode === 'new' ? t('editor.save_deck') : t('common.save'));
 	let clarifying = $state(false);
 	let uploading = $state(false);
 	let importing = $state(false);
-	let importStatus = $state('Import bereit. Wähle PDF/PPTX oder Voice.');
+	let importStatus = $state(t('editor.import_ready'));
 	let importName = $state('');
 	let showMarkdown = $state(false);
 	let msg = $state('');
@@ -47,9 +50,9 @@
 
 	// Why the server used the local layout instead of Claude (see src/lib/server/claude.ts).
 	function localNote(reason: unknown): string {
-		if (reason === 'provider_error') return ' Claude war nicht erreichbar, daher lokal.';
-		if (reason === 'refusal') return ' Claude hat abgelehnt, daher lokal.';
-		if (reason === 'invalid_output') return ' Claude lieferte kein gültiges Ergebnis, daher lokal.';
+		if (reason === 'provider_error') return t('editor.local_provider');
+		if (reason === 'refusal') return t('editor.local_refusal');
+		if (reason === 'invalid_output') return t('editor.local_invalid');
 		return '';
 	}
 	function prev() { pidx = Math.max(0, safeIdx - 1); }
@@ -63,16 +66,16 @@
 	}
 
 	function fixLabel(fix: DeckQualityFix): string {
-		if (fix === 'add_cta') return 'CTA ergänzen';
-		if (fix === 'suggest_reveal') return 'Reveal vorschlagen';
-		return 'Kürzen';
+		if (fix === 'add_cta') return t('editor.add_cta');
+		if (fix === 'suggest_reveal') return t('editor.suggest_reveal');
+		return t('editor.shorten');
 	}
 
 	function applyFix(fix: DeckQualityFix) {
-		source = applyQualityFix(source, fix);
+		source = applyQualityFix(source, fix, detectContentLocale(slides));
 		pidx = 0;
 		err = false;
-		msg = `${fixLabel(fix)} angewendet.`;
+		msg = t('editor.fix_applied', { fix: fixLabel(fix) });
 	}
 
 	async function save(options: { stayOnNew?: boolean } = {}): Promise<string | null> {
@@ -84,13 +87,13 @@
 				body: JSON.stringify({ title: effectiveTitle, source })
 			});
 			const j = await res.json().catch(() => ({}));
-			if (!res.ok) { err = true; msg = j.message ?? 'Speichern fehlgeschlagen.'; return null; }
+			if (!res.ok) { err = true; msg = j.message ?? t('editor.save_failed'); return null; }
 			if (mode === 'new') {
 				if (!options.stayOnNew) await goto(`/edit/${j.id}`);
-				else msg = 'Deck gespeichert. Live-Session startet …';
+				else msg = t('editor.saved_starting');
 				return j.id;
 			}
-			msg = 'Gespeichert.';
+			msg = t('editor.saved');
 			return id;
 		} finally { saving = false; }
 	}
@@ -105,7 +108,7 @@
 			if (!res.ok) { err = true; msg = j.message ?? 'Klarheit fehlgeschlagen.'; return; }
 			source = j.source;
 			title = j.title ?? title;
-			msg = j.mode === 'ai' ? 'Mit Claude verdichtet.' : j.fallbackReason === 'no_key' ? 'Lokal verdichtet (kein AI-Key im Server).' : `Lokal verdichtet.${localNote(j.fallbackReason)}`;
+			msg = j.mode === 'ai' ? t('editor.clarified_ai') : j.fallbackReason === 'no_key' ? t('editor.clarified_local_no_key') : `${t('editor.clarified_local')}${localNote(j.fallbackReason)}`;
 		} finally { clarifying = false; }
 	}
 
@@ -117,16 +120,16 @@
 			form.set('file', fileInput.files[0]);
 			const res = await fetch(`/api/decks/${id}/assets`, { method: 'POST', body: form });
 			const j = await res.json().catch(() => ({}));
-			if (!res.ok) { err = true; msg = j.message ?? 'Upload fehlgeschlagen.'; return; }
+			if (!res.ok) { err = true; msg = j.message ?? t('editor.upload_failed'); return; }
 			source = `${source.trim()}\n\n![${j.alt ?? 'Bild'}](${j.url})\n`;
-			msg = 'Bild eingefügt.';
+			msg = t('editor.image_inserted');
 		} finally { uploading = false; if (fileInput) fileInput.value = ''; }
 	}
 
 	async function importDeckFile() {
 		const file = importInput?.files?.[0];
 		if (!file) return;
-		importing = true; err = false; msg = ''; importName = file.name; importStatus = `Import läuft: ${file.name} wird gelesen …`;
+		importing = true; err = false; msg = ''; importName = file.name; importStatus = t('editor.import_reading', { file: file.name });
 		try {
 			const form = new FormData();
 			form.set('file', file);
@@ -134,36 +137,36 @@
 			const endpoint = file.name.toLowerCase().endsWith('.pptx') ? '/api/import/ppt' : '/api/import/pdf';
 			const res = await fetch(endpoint, { method: 'POST', body: form });
 			const j = await res.json().catch(() => ({}));
-			if (!res.ok) { err = true; msg = j.message ?? 'Import fehlgeschlagen.'; importStatus = `Import Fehler: ${msg}`; return; }
+			if (!res.ok) { err = true; msg = j.message ?? t('editor.import_failed'); importStatus = t('editor.import_error', { message: msg }); return; }
 			source = j.source;
 			title = j.title ?? title;
 			pidx = 0;
-			msg = j.mode === 'ai' ? 'Importiert und mit Claude vertikal neu gelayoutet.' : `Importiert und lokal vertikal gelayoutet.${localNote(j.fallbackReason)}`;
-			importStatus = `Import fertig: ${parseDeck(j.source).length} mobile Folien erkannt.`;
+			msg = j.mode === 'ai' ? t('editor.imported_ai') : `${t('editor.imported_local')}${localNote(j.fallbackReason)}`;
+			importStatus = t('editor.import_done', { count: parseDeck(j.source).length });
 		} finally { importing = false; if (importInput) importInput.value = ''; }
 	}
 
 	async function importVoiceFile() {
 		const file = voiceInput?.files?.[0];
 		if (!file) return;
-		importing = true; err = false; msg = ''; importName = file.name; importStatus = `Import läuft: ${file.name} wird transkribiert …`;
+		importing = true; err = false; msg = ''; importName = file.name; importStatus = t('editor.import_transcribing', { file: file.name });
 		try {
 			const form = new FormData();
 			form.set('file', file);
 			if (title.trim()) form.set('title', title.trim());
 			const res = await fetch('/api/import/voice', { method: 'POST', body: form });
 			const j = await res.json().catch(() => ({}));
-			if (!res.ok) { err = true; msg = j.message ?? 'Voice-Import fehlgeschlagen.'; importStatus = `Import Fehler: ${msg}`; return; }
+			if (!res.ok) { err = true; msg = j.message ?? t('editor.import_failed'); importStatus = t('editor.import_error', { message: msg }); return; }
 			source = j.source;
 			title = j.title ?? title;
 			pidx = 0;
-			msg = j.mode === 'ai' ? 'Audio transkribiert und mit Claude gelayoutet.' : `Transkript in Slides umgebaut.${localNote(j.fallbackReason)}`;
-			importStatus = `Import fertig: ${parseDeck(j.source).length} mobile Folien erkannt.`;
+			msg = j.mode === 'ai' ? t('editor.voice_ai') : `${t('editor.voice_local')}${localNote(j.fallbackReason)}`;
+			importStatus = t('editor.import_done', { count: parseDeck(j.source).length });
 		} finally { importing = false; if (voiceInput) voiceInput.value = ''; }
 	}
 
 	async function start() {
-		if (count === 0) { err = true; msg = 'Erst eine Folie schreiben.'; return; }
+		if (count === 0) { err = true; msg = t('editor.first_slide'); return; }
 		const savedId = await save({ stayOnNew: true });
 		if (!savedId) return;
 		starting = true; err = false; msg = '';
@@ -173,14 +176,14 @@
 				body: JSON.stringify({ deckId: savedId, pin: pin.trim() || undefined })
 			});
 			const out = await res.json().catch(() => ({}));
-			if (!res.ok) { err = true; msg = out.message ?? 'Konnte Präsentation nicht starten.'; return; }
+			if (!res.ok) { err = true; msg = out.message ?? t('editor.start_failed'); return; }
 			const { id: roomId, claimToken } = out;
 			const claim = await fetch(`/present/${roomId}/claim`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ claimToken })
 			});
-			if (!claim.ok) { err = true; msg = 'Presenter-Zugriff konnte nicht gesetzt werden.'; return; }
+			if (!claim.ok) { err = true; msg = t('editor.presenter_failed'); return; }
 			await goto(`/present/${roomId}`);
 		} finally { starting = false; }
 	}
@@ -189,104 +192,105 @@
 <main>
 	<header>
 		<a class="mono tag" href="/">← EIGEN.BEAM</a>
-		<div class="toplinks"><a class="mono small" href="/account">Meine Decks</a><span class="mono small">{mode === 'new' ? 'Neues Deck' : 'Bearbeiten'}</span></div>
+		<div class="toplinks"><a class="mono small" href="/account">{t('common.my_decks')}</a><span class="mono small">{mode === 'new' ? t('common.new_deck') : t('common.edit')}</span></div>
 	</header>
 
 	<div class="grid">
 		<div class="edit">
-			<section class="fast-path" aria-label="Fast Path">
-				<span class="mono tag">FAST PATH</span>
+			<section class="fast-path" aria-label={t('editor.fast_path')}>
+				<span class="mono tag">{t('editor.fast_path')}</span>
 				<div>
-					<button class="quick primary" onclick={() => document.getElementById('import-studio')?.scrollIntoView({ behavior: 'smooth' })}>Material importieren</button>
-					<button class="quick" onclick={() => document.getElementById('deck-templates')?.scrollIntoView({ behavior: 'smooth' })}>Template</button>
-					<button class="quick" onclick={() => (showMarkdown = !showMarkdown)}>{showMarkdown ? 'Guided' : 'Advanced'}</button>
+					<button class="quick primary" onclick={() => document.getElementById('import-studio')?.scrollIntoView({ behavior: 'smooth' })}>{t('editor.import_material')}</button>
+					<button class="quick" onclick={() => document.getElementById('deck-templates')?.scrollIntoView({ behavior: 'smooth' })}>{t('editor.template')}</button>
+					<button class="quick" onclick={() => (showMarkdown = !showMarkdown)}>{showMarkdown ? t('editor.guided') : t('editor.advanced')}</button>
 				</div>
-				<p>{count ? `${readyLabel} · Titel: ${effectiveTitle}` : `${readyLabel} · Material reinwerfen, Ready Check prüfen, live starten.`}</p>
+				<p>{count ? t('editor.fast_status', { ready: readyLabel, title: effectiveTitle }) : t('editor.fast_empty', { ready: readyLabel })}</p>
 			</section>
-			<section class="flow-spine" aria-label="Session Schritte"><span>1 Material</span><span>2 Ready Check</span><span>3 Live</span></section>
+			<section class="flow-spine"><span>{t('editor.step_material')}</span><span>{t('editor.step_ready')}</span><span>{t('editor.step_live')}</span></section>
 			<section class="composer-intro">
-				<span class="mono tag">GUIDED COMPOSER</span>
-				<h1>Baue eine mobile Session.</h1>
-				<p>Import rein, Story schärfen, live starten. Advanced bleibt für Feinschliff da — nicht als Einstiegshürde.</p>
+				<span class="mono tag">{t('editor.guided_composer')}</span>
+				<h1>{t('editor.title')}</h1>
+				<p>{t('editor.intro')}</p>
 			</section>
-			<section id="import-studio" class="import-studio" aria-label="Import Studio">
+			<section id="import-studio" class="import-studio" aria-label={t('editor.import_studio')}>
 				<div class="studio-head">
-					<div><span class="mono tag">IMPORT STUDIO</span><h2>Aus vorhandenem Material ein Phone-Deck machen.</h2></div>
-					<button class="pill advanced" onclick={() => (showMarkdown = !showMarkdown)}>{showMarkdown ? 'Advanced schließen' : 'Advanced'}</button>
+					<div><span class="mono tag">{t('editor.import_studio')}</span><h2>{t('editor.import_title')}</h2></div>
+					<button class="pill advanced" onclick={() => (showMarkdown = !showMarkdown)}>{showMarkdown ? t('editor.advanced_close') : t('editor.advanced')}</button>
 				</div>
 				<div class="import-grid">
-					<label class="import-card primary">PDF/PPTX<span>Slides, One-Pager oder Pitch hochladen</span><input bind:this={importInput} type="file" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation" onchange={importDeckFile} disabled={importing} /></label>
-					<label class="import-card">Voice<span>Audio oder Transkript zu Slides</span><input bind:this={voiceInput} type="file" accept="audio/*,.txt,text/plain" onchange={importVoiceFile} disabled={importing} /></label>
-					<button class="import-card" onclick={clarify} disabled={clarifying}><strong>{clarifying ? 'Verdichte …' : 'Klarer machen'}</strong><span>Auf eine Idee pro Folie trimmen</span></button>
+					<label class="import-card primary">PDF/PPTX<span>{t('editor.upload_hint')}</span><input bind:this={importInput} type="file" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation" onchange={importDeckFile} disabled={importing} /></label>
+					<label class="import-card">{t('editor.voice')}<span>{t('editor.voice_hint')}</span><input bind:this={voiceInput} type="file" accept="audio/*,.txt,text/plain" onchange={importVoiceFile} disabled={importing} /></label>
+					<button class="import-card" onclick={clarify} disabled={clarifying}><strong>{clarifying ? t('editor.clarifying') : t('editor.clarify')}</strong><span>{t('editor.clarify_hint')}</span></button>
 				</div>
-				<div class="import-status" class:busy={importing} class:bad={err && importStatus.startsWith('Import Fehler')}>
-					<span>{importing ? 'Import läuft' : 'Import Preview'}</span>
+				<div class="import-status" class:busy={importing} class:bad={err}>
+					<span>{importing ? t('editor.import_running') : t('editor.import_preview')}</span>
 					<strong>{importStatus}</strong>
 					{#if importName}<small>{importName}</small>{/if}
 				</div>
 			</section>
-			<input class="title" bind:value={title} placeholder="Titel optional" maxlength="120" />
-			<section id="deck-templates" class="template-strip" aria-label="Deck Templates">
-				<span class="mono tag">STARTER</span>
-				<div>{#each Object.entries(TEMPLATES) as [key, template]}<button class="pill" onclick={() => setTemplate(key)}>{template.label}</button>{/each}</div>
+			<label class="field-label" for="deck-title">{t('editor.title_optional')}</label>
+			<input id="deck-title" class="title" bind:value={title} placeholder={t('editor.title_optional')} maxlength="120" />
+			<section id="deck-templates" class="template-strip" aria-label={t('editor.templates_label')}>
+				<span class="mono tag">{t('editor.starter')}</span>
+				<div>{#each Object.entries(TEMPLATES) as [key, template]}<button class="pill" onclick={() => setTemplate(key)}>{key === 'starterDe' ? t('editor.template_de') : template.label}</button>{/each}</div>
 			</section>
 			{#if showMarkdown}
-				<textarea bind:value={source} spellcheck="false" placeholder="Markdown … `---` trennt Folien"></textarea>
+				<textarea bind:value={source} spellcheck="false" placeholder={t('editor.markdown_placeholder')}></textarea>
 				<p class="help">
-					<strong>Konvention:</strong> <code>type: number|quote|image|compare|timeline</code>, Label-Zeile = Eyebrow,
-					<code>#&nbsp;Headline</code>, <code>++ Reveal</code>, <code>---</code> trennt Folien.
+					<strong>{t('editor.convention')}</strong> <code>type: number|quote|image|compare|timeline</code>, Label = Eyebrow,
+					<code>#&nbsp;Headline</code>, <code>++ Reveal</code>, <code>---</code> {t('editor.separates_slides')}
 				</p>
 			{:else}
 				<section class="guided-card">
-					<strong>{count ? `${count} mobile Folien erkannt` : 'Noch kein Deck'}</strong>
-					<p>{count ? 'Nutze die Live-Preview und öffne Advanced nur für Feinschliff.' : 'Importiere Material oder wähle ein Template. Danach zeigt dir der Ready Check, ob es live-tauglich ist.'}</p>
+					<strong>{count ? t('editor.import_done', { count }) : t('editor.no_deck')}</strong>
+					<p>{count ? t('editor.guided_ready') : t('editor.guided_empty')}</p>
 				</section>
 			{/if}
-			<section class="ready-check" aria-label="Ready Check">
+			<section class="ready-check" aria-label={t('editor.ready_check')}>
 				<div class="ready-head">
-					<span class="mono tag">READY CHECK</span>
+					<span class="mono tag">{t('editor.ready_check')}</span>
 					<strong class:good={quality.status === 'live_ready'} class:warn={quality.status === 'almost_ready'}>{readyLabel}</strong>
 				</div>
 				<p>{quality.summary}</p>
-				<ul class="ready-goals" aria-label="Live-ready Fortschritt">
+				<ul class="ready-goals" aria-label={t('editor.ready_progress')}>
 					{#each readyItems as item}
 						<li class:done={item.done}>{item.done ? '✓' : '○'} {item.label}</li>
 					{/each}
 				</ul>
 				<div class="quality-metrics">
-					<span>{quality.metrics.slideCount} Folien</span><span>{quality.metrics.denseSlides} dicht</span><span>{quality.metrics.longHeadlines} lang</span><span>{quality.metrics.revealSlides} Reveal</span>
+					<span>{t('editor.metric_slides', { count: quality.metrics.slideCount })}</span><span>{t('editor.metric_dense', { count: quality.metrics.denseSlides })}</span><span>{t('editor.metric_long', { count: quality.metrics.longHeadlines })}</span><span>{t('editor.metric_reveal', { count: quality.metrics.revealSlides })}</span>
 				</div>
 				{#if quality.issues.length}
 					<ul>
 						{#each quality.issues.slice(0, 3) as issue}<li>{issue.message}</li>{/each}
 					</ul>
 				{:else}
-					<p class="ready-ok">Keine harten mobilen Risiken erkannt.</p>
+					<p class="ready-ok">{t('editor.mobile_risks_none')}</p>
 				{/if}
 				<div class="fixes">
 					{#each quality.suggestedFixes as fix}<button class="pill" onclick={() => applyFix(fix)}>{fixLabel(fix)}</button>{/each}
-					{#if !quality.suggestedFixes.includes('add_cta')}<button class="pill" onclick={() => applyFix('add_cta')}>CTA ergänzen</button>{/if}
+					{#if !quality.suggestedFixes.includes('add_cta')}<button class="pill" onclick={() => applyFix('add_cta')}>{t('editor.add_cta')}</button>{/if}
 				</div>
 			</section>
-			<section class="launch-card" aria-label="Session Start">
-				<label class="pin">PIN optional <input bind:value={pin} maxlength="24" placeholder="z.B. 1234" inputmode="numeric" /></label>
-				{#if mode === 'edit'}<label class="upload">Bild einfügen <input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onchange={uploadAsset} disabled={uploading} /></label>{/if}
+			<section class="launch-card" aria-label={t('editor.session_start')}>
+				<label class="pin">{t('editor.pin_optional')} <input bind:value={pin} maxlength="24" placeholder="e.g. 1234" inputmode="numeric" /></label>
+				{#if mode === 'edit'}<label class="upload">{t('editor.insert_image')} <input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onchange={uploadAsset} disabled={uploading} /></label>{/if}
 			</section>
 
 			<div class="actions">
 				<button class="ghost" onclick={() => save()} disabled={saving || starting}>{saveLabel}</button>
 				<button class="accent" onclick={start} disabled={saving || starting}>{launchLabel}</button>
 			</div>
-			{#if msg}<p class="msg" class:err>{msg}</p>{/if}
-			{#if mode === 'new'}<p class="help">Du hast schon ein Phone-Deck. Live starten sichert es automatisch und öffnet sofort die Presenter-Remote.</p>{/if}
+			{#if msg}<p class="msg" class:err aria-live="polite">{msg}</p>{/if}
+			{#if mode === 'new'}<p class="help">{t('editor.new_help')}</p>{/if}
 		</div>
 
 		<div class="preview">
-			<div class="phone"><div class="frame">{#if preview}<SlideView slide={preview} />{:else}<div class="empty">Noch keine Folie. Schreib <code>#&nbsp;Headline</code>.</div>{/if}</div></div>
+			<div class="phone"><div class="frame">{#if preview}<SlideView slide={preview} />{:else}<div class="empty">{t('editor.no_slide')}</div>{/if}</div></div>
 			<div class="stepper">
-				<button onclick={prev} disabled={count === 0 || safeIdx === 0} aria-label="Vorherige Folie">‹</button>
+				<button onclick={prev} disabled={count === 0 || safeIdx === 0} aria-label={t('editor.previous_slide')}>‹</button>
 				<span class="pos mono">{count ? safeIdx + 1 : 0} / {count}</span>
-				<button onclick={next} disabled={count === 0 || safeIdx === count - 1} aria-label="Nächste Folie">›</button>
+				<button onclick={next} disabled={count === 0 || safeIdx === count - 1} aria-label={t('editor.next_slide')}>›</button>
 			</div>
 		</div>
 	</div>
@@ -345,8 +349,9 @@
 	.launch-card { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 	.title, textarea, .pin input { background: transparent; border: 1px solid var(--hair); border-radius: 10px; padding: 12px 14px; color: var(--fg); font: inherit; }
 	.title { font-weight: 700; font-size: 16px; }
+	.field-label { color:var(--fg); font-size:13px; font-weight:760; }
 	textarea { min-height: 46vh; resize: vertical; font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', monospace; font-size: 14px; line-height: 1.55; tab-size: 2; }
-	.title:focus, textarea:focus, .pin input:focus { outline: none; border-color: var(--fg); }
+	.title:focus, textarea:focus, .pin input:focus { border-color: var(--fg); }
 	.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 	.pill, .ghost, .accent { min-height: 44px; padding: 0 16px; border-radius: 999px; font-weight: 700; border: 1px solid var(--hair); }
 	.pill, .ghost { background: var(--surface); color: var(--fg); }
@@ -354,7 +359,7 @@
 	.accent { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 	button:disabled { opacity: 0.5; }
 	.help, .msg, .pin, .upload { font-size: 12px; color: var(--muted); line-height: 1.5; }
-	.help code, .empty code { font-family: ui-monospace, monospace; font-size: 0.9em; padding: 1px 4px; border: 1px solid var(--hair); border-radius: 4px; }
+	.help code { font-family: ui-monospace, monospace; font-size: 0.9em; padding: 1px 4px; border: 1px solid var(--hair); border-radius: 4px; }
 	.msg.err { color: #e0483d; }
 	.pin { display: flex; gap: 8px; align-items: center; }
 	.pin input { width: 120px; min-height: 36px; padding: 8px 10px; }

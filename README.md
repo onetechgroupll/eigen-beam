@@ -19,7 +19,7 @@
 It is built for the meetings where there is no screen: client pitches, offsites, standing updates, restaurant backrooms. A PDF sent afterwards cannot make everyone look at the same slide while you talk. eigen.beam can.
 
 > [!NOTE]
-> The app UI is currently **German** ("Weiter", "Live-Sync testen"). Code, docs and the MCP interface are English. Help with i18n is very welcome, see [Contributing](#contributing).
+> The app UI is available in **English and German**. It follows the browser language by default, and the persistent language switcher is available in the footer and account area. Deck content is never translated.
 
 ### What it does
 

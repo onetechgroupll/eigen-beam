@@ -4,6 +4,7 @@ This project does not currently publish formal versioned releases. This changelo
 
 ## Unreleased / current main
 
+- Added complete English/German UI localization with request-level locale resolution, persistent language controls, localized mail/API messages, stable API error codes, English-first starter content, an i18n CI guard, and an accessibility pass for dialogs and forms.
 - Markdown export and cloning now roundtrip all six slide types without losing number or quote content, escape reserved body syntax, and keep original source with speaker notes available only to the owner export.
 - An explicit `type: text` now keeps an attached image inline instead of switching the slide to the full-bleed image layout.
 - Presenter remotes can explicitly end a session from the Session menu or final slide, with question export, retry-safe acknowledgement and a persisted end summary. Viewers receive a replay-first end screen, including after reconnect or activity-store fallback; ended rooms now have a configurable retention TTL and deterministic eviction.

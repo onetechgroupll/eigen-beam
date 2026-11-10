@@ -31,7 +31,7 @@ bun run build
 Expected current repository verification:
 
 ```text
-ALL PASS — 83 assertions.
+ALL PASS — 91 assertions.
 ```
 
 ## Local production smoke

@@ -6,9 +6,12 @@ import { createUnsubToken, escapeHtml, recordFollowDetailed } from '$lib/server/
 import { getMailer } from '$lib/server/mailer';
 import { canonicalPublicOrigin } from '$lib/server/origin';
 import { clientRateLimitKey, rateLimit, RATE_LIMITS } from '$lib/server/rate-limit';
+import { apiError } from '$lib/server/api-error';
+import { requestText } from '$lib/server/locale';
 
-export const POST: RequestHandler = async ({ request, url, getClientAddress }) => {
-	const limited = rateLimit(clientRateLimitKey('follow', getClientAddress), RATE_LIMITS.follow);
+export const POST: RequestHandler = async (event) => {
+	const { request, url, getClientAddress } = event;
+	const limited = rateLimit(clientRateLimitKey('follow', getClientAddress), RATE_LIMITS.follow, event.locals.locale);
 	if (limited) return limited;
 	const body = await request.json().catch(() => ({})) as Record<string, unknown>;
 	try {
@@ -21,13 +24,13 @@ export const POST: RequestHandler = async ({ request, url, getClientAddress }) =
 		if (isNew) {
 			try {
 				const unsubUrl = new URL(`/api/follow/unsubscribe?token=${encodeURIComponent(createUnsubToken(record.email, authSigningSecret()))}`, canonicalPublicOrigin(url, env)).toString();
-				const deckSuffix = record.deckId ? ` zu diesem Deck (${record.deckId})` : '';
-				const deckSuffixHtml = record.deckId ? ` zu diesem Deck (${escapeHtml(record.deckId)})` : '';
+				const deckSuffix = record.deckId ? requestText(event, 'mail.follow_deck_suffix', { deckId: record.deckId }) : '';
+				const deckSuffixHtml = record.deckId ? requestText(event, 'mail.follow_deck_suffix', { deckId: escapeHtml(record.deckId) }) : '';
 				await getMailer().send({
 					to: record.email,
-					subject: 'Du bist dabei — eigen.beam meldet sich',
-					text: `Danke fürs Folgen.\n\nWir pingen dich, sobald es ein neues eigen.beam${deckSuffix} gibt.\n\nKein Interesse mehr? Abmelden: ${unsubUrl}\n\n— eigen.beam`,
-					html: `<p>Danke fürs Folgen.</p><p>Wir pingen dich, sobald es ein neues eigen.beam${deckSuffixHtml} gibt.</p><p style="color:#888;font-size:12px">Kein Interesse mehr? <a href="${escapeHtml(unsubUrl)}">Abmelden</a></p>`
+					subject: requestText(event, 'mail.follow_subject'),
+					text: requestText(event, 'mail.follow_text', { deckSuffix, url: unsubUrl }),
+					html: requestText(event, 'mail.follow_html', { deckSuffix: deckSuffixHtml, url: escapeHtml(unsubUrl) })
 				});
 			} catch (mailErr) {
 				console.error('[follow] Confirmation-Mail fehlgeschlagen:', mailErr);
@@ -37,6 +40,6 @@ export const POST: RequestHandler = async ({ request, url, getClientAddress }) =
 		return json({ ok: true, email: record.email, isNew });
 	} catch (error) {
 		const status = typeof (error as { status?: unknown }).status === 'number' ? (error as { status: number }).status : 400;
-		return json({ error: true, message: (error as Error).message }, { status });
+		return apiError(event, status === 400 ? 'invalid_email' : 'internal_error', status);
 	}
 };

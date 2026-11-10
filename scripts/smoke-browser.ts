@@ -93,7 +93,7 @@ async function main() {
 			return { status: response.status, body: await response.json() };
 		});
 		assert.equal(doubleEnd.status, 410);
-		assert.match(String((doubleEnd.body as { message?: unknown }).message), /bereits beendet/i);
+			assert.equal((doubleEnd.body as { code?: unknown }).code, 'already_ended');
 		assert.equal(typeof (doubleEnd.body as { endedAt?: unknown }).endedAt, 'number');
 		assert.equal((doubleEnd.body as { stats?: { questions?: unknown } }).stats?.questions, 1);
 		assert.equal((doubleEnd.body as { questions?: unknown[] }).questions?.length, 1);
@@ -161,10 +161,12 @@ async function main() {
 		await englishPage.getByRole('heading', { name: /Present live on every phone/i }).waitFor({ timeout: 5_000 });
 		await englishPage.goto(`${BASE}/v/${roomId}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
 		await englishPage.getByRole('heading', { name: /^Presentation ended\.$/i }).waitFor({ timeout: 5_000 });
+		await englishPage.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
 		await englishPage.getByRole('button', { name: /^Deutsch$/i }).click({ timeout: 10_000 });
 		assert.equal(await englishPage.locator('html').getAttribute('lang'), 'de');
-		await englishPage.reload({ waitUntil: 'domcontentloaded', timeout: 45_000 });
+		await englishPage.goto(`${BASE}/v/${roomId}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
 		await englishPage.getByRole('heading', { name: /^Präsentation beendet\.$/i }).waitFor({ timeout: 5_000 });
+		assert.equal(await englishPage.locator('html').getAttribute('lang'), 'de');
 		ok('EN-Browser erhält englische Viewer-UI; Sprachschalter persistiert DE per Cookie');
 		await englishContext.close();
 	} finally {
