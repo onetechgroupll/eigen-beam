@@ -10,7 +10,7 @@ Whoever holds the presenter token controls what a room full of people sees. View
 
 - The presenter token is set as an httpOnly cookie scoped to `/present/:id`. It never appears in a URL, a viewer payload, an export or an MCP response.
 - MCP `create_room` returns viewer and replay links only.
-- Public routes (viewer, replay, share, export) use dedicated serializers that strip presenter-only fields: speaker notes, raw source, owner IDs, tokens.
+- Public routes (viewer, replay, share and non-owner export) use dedicated serializers that strip presenter-only fields: speaker notes, raw source, owner IDs, tokens. The authenticated deck owner is the explicit export exception and receives the original source, including notes.
 - PIN rooms use a signed, room-scoped unlock cookie with rate limiting. Accounts use signed magic-link session cookies.
 
 ## Consequences

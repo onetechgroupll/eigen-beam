@@ -8,6 +8,10 @@ export type PublicDeckExportJson = {
 	slides: PublicSlide[];
 };
 
+export type OwnerDeckExportJson = PublicDeckExportJson & {
+	source: string;
+};
+
 export function deckToPublicExportMarkdown(deck: Deck): string {
 	return publicSlidesToSource(toPublicSlides(deck.slides));
 }
@@ -20,6 +24,17 @@ export function deckToPublicExportJson(deck: Deck): PublicDeckExportJson {
 		slideCount: slides.length,
 		updatedAt: deck.updatedAt,
 		slides
+	};
+}
+
+export function deckToOwnerExportMarkdown(deck: Deck): string {
+	return deck.source;
+}
+
+export function deckToOwnerExportJson(deck: Deck): OwnerDeckExportJson {
+	return {
+		...deckToPublicExportJson(deck),
+		source: deck.source
 	};
 }
 

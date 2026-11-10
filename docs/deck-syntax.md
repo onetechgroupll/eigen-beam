@@ -58,8 +58,24 @@ Directive keys are case-insensitive. A line counts as a directive only for these
 | `eyebrow: <text>` | eyebrow, used only when there is no text above the heading |
 | `notes: <text>` (alias `speaker:`) | private speaker notes; the last one wins |
 | `number: <value>` (alias `metric:`) | the big number on a `number` slide |
+| `quote: <text>` | the quoted text (`quote` slides only) |
+| `attribution: <text>` | the attribution (`quote` slides only) |
 
 `left:` and `right:` are read only on `compare` slides (see below).
+
+## Escaping reserved lines
+
+Prefix a line with `\` when it should stay eyebrow or body text even though it looks like deck syntax. The parser removes that one escape character after it has checked directives, reveals, compare sides and timeline entries.
+
+```markdown
+# Literal examples
+\notes: this is body text, not a speaker note
+\++ this is body text, not a reveal
+\- Q1: this is body text, not a timeline entry
+\left: this is body text, not a compare side
+```
+
+The Markdown export adds these escapes automatically. Each leading backslash before reserved syntax is preserved by adding one escape character, so `\\notes: …`, `\\\\notes: …` and `\\\\\\notes: …` roundtrip with one, two and three literal backslashes. Unknown keys still need no escape: `Goal: more revenue` continues to parse as normal text. Existing decks without leading backslashes in body lines keep their previous meaning.
 
 ## Reveal items
 
@@ -79,7 +95,7 @@ Reveal items are a list shown under the body. On a viewer's phone they appear on
 notes: Mention the pilot discount only if asked.
 ```
 
-Notes appear in the presenter remote under **NOTES**. They are never sent to viewers, the recap, the replay, the share page, exports or the public deck API. Only the deck owner gets them back from `GET /api/decks/:id`. A deck created via MCP has no owner until someone claims it via its claim link, so until then nobody gets its notes over HTTP ([HTTP API: deck access](http-api.md#deck-access)).
+Notes appear in the presenter remote under **NOTES**. They are never sent to viewers, the recap, the replay, the share page, non-owner exports or the public deck API. The deck owner gets them back from `GET /api/decks/:id` and in owner-only browser exports. A deck created via MCP has no owner until someone claims it via its claim link, so until then nobody gets its notes over HTTP ([HTTP API: deck access](http-api.md#deck-access)).
 
 ## Images
 
@@ -91,6 +107,7 @@ Notes appear in the presenter remote under **NOTES**. They are never sent to vie
 - Only the **first** image in a slide is used. Further images stay in the text as literal Markdown.
 - The URL must be `https://…` or an uploaded asset path `/assets/…`. Any other URL (including `http://`) is silently dropped.
 - A slide with an image and no `type:` becomes an `image` slide.
+- `type: text` keeps the image inline with the text instead of using the full-bleed image layout.
 - Upload images in the editor or via `POST /api/decks/:id/assets` ([HTTP API](http-api.md#upload-an-image)); the response gives you the `/assets/…` URL.
 
 ## Slide types
@@ -120,8 +137,17 @@ type: quote
 — Head of Sales, pilot customer
 ```
 
-- The quote is the first body line starting with `>`. Without one, the headline is the quote.
-- The attribution is the first body line starting with a dash and a space (`- `, `– ` or `— `).
+The equivalent directive form is used by exports because it roundtrips without ambiguity:
+
+```markdown
+type: quote
+quote: We stopped sending PDFs after the first session.
+attribution: Head of Sales, pilot customer
+# Customer voice
+```
+
+- A non-empty `quote:` wins over the first body line starting with `>`; an empty directive falls back to that legacy form, then to the headline.
+- A non-empty `attribution:` wins over the first body line starting with a dash and a space (`- `, `– ` or `— `); an empty directive falls back to that legacy form.
 - The rest of the body is not shown.
 
 ### `image`
