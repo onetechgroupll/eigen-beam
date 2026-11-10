@@ -147,9 +147,9 @@ function parseQuote(kind: SlideKind, headline: string, body: string, lines: stri
 	if (kind !== 'quote') return null;
 	const quoteLine = lines.find((line) => line.trim().startsWith('>'));
 	const quoteDirective = directives.get('quote');
-	const quote = (quoteDirective ? cleanInline(quoteDirective) : '') || cleanInline((quoteLine ?? headline).replace(/^\s*>\s*/, ''));
+	const quote = (quoteDirective && quoteDirective.trim() ? quoteDirective : '') || cleanInline((quoteLine ?? headline).replace(/^\s*>\s*/, ''));
 	const attributionDirective = directives.get('attribution');
-	const attribution = (attributionDirective ? cleanInline(attributionDirective) : '') || lines
+	const attribution = (attributionDirective && attributionDirective.trim() ? attributionDirective : '') || lines
 		.map((line) => line.trim())
 		.find((line) => /^[-—–]\s+/.test(line))
 		?.replace(/^[-—–]\s+/, '')
@@ -191,7 +191,7 @@ function collapse(lines: string[]): string {
 }
 
 function unescapeReservedSourceLine(line: string): string {
-	const match = line.match(/^(\s*)\\(.*)$/);
+	const match = line.match(/^(\s*)\\([\s\S]*)$/);
 	if (!match) return line;
 	const [, whitespace, content] = match;
 	if (isReservedSourceLine(content.replace(/^\\+/, ''))) {
@@ -202,7 +202,8 @@ function unescapeReservedSourceLine(line: string): string {
 
 export function isReservedSourceLine(line: string): boolean {
 	const directive = line.match(DIRECTIVE);
-	return REVEAL.test(line)
+	return HEADING.test(line)
+		|| REVEAL.test(line)
 		|| looksLikeTimelineEntry(line)
 		|| /^\s*(?:left|right)\s*:/i.test(line)
 		|| SEPARATOR.test(line)
@@ -210,18 +211,19 @@ export function isReservedSourceLine(line: string): boolean {
 }
 
 // Linear, backtracking-free stand-in for the TIMELINE/TIMELINE_SPACED pair:
-// anchored bullet prefix, then a colon or a spaced dash separator. The lazy
-// regex pair detonated super-quadratically on long whitespace runs, reachable
-// per exported body line. Superset of the strict patterns; escape and unescape
-// share this one predicate, so the roundtrip stays exact either way.
+// a bullet line whose text contains any separator character (`:`, `-`, `–`, `—`)
+// after at least one label character. Conservative superset of the strict
+// patterns (parseTimeline accepts compact and spaced separators); escape and
+// unescape share this one predicate, so the roundtrip stays exact either way.
+// The lazy regex pair this replaces detonated super-quadratically on long
+// whitespace runs, reachable per exported body line.
 function looksLikeTimelineEntry(line: string): boolean {
 	const match = line.match(/^\s*[-*]\s*([\s\S]+)$/);
 	if (!match) return false;
 	const rest = match[1];
-	if (rest.includes(':')) return true;
-	for (let i = 1; i < rest.length - 1; i += 1) {
-		const code = rest.charCodeAt(i);
-		if ((code === 45 || code === 8211 || code === 8212) && /\s/.test(rest[i - 1]) && /\s/.test(rest[i + 1])) return true;
+	for (let i = 1; i < rest.length; i += 1) {
+		const c = rest[i];
+		if (c === ':' || c === '-' || c === '–' || c === '—') return true;
 	}
 	return false;
 }

@@ -191,6 +191,9 @@ async function main() {
 			'reveal: x',
 			'- a: b',
 			'- Q1:Pilot',
+			'- Q1-Pilot',
+			'- Q1: a\u2028b',
+			'# Kein Heading',
 			'left: bleibt Text',
 			'---',
 			'NOTES: upper',
@@ -209,6 +212,8 @@ async function main() {
 		assert.match(exported, /^\\reveal: x$/m);
 		assert.match(exported, /^\\- a: b$/m);
 		assert.match(exported, /^\\- Q1:Pilot$/m);
+		assert.match(exported, /^\\- Q1-Pilot$/m);
+		assert.match(exported, /^\\# Kein Heading$/m);
 		assert.match(exported, /^\\left: bleibt Text$/m);
 		assert.match(exported, /^\\---$/m);
 		assert.match(exported, /^\\NOTES: upper$/m);
