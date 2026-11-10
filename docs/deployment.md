@@ -10,7 +10,7 @@ eigen.beam is one Node process (SvelteKit `adapter-node`). It runs anywhere Node
 | Replays / follows | off / file | Postgres |
 | Assets | local files | S3-compatible bucket |
 | Mail | local outbox | Resend or Postmark |
-| Required config | `ORIGIN` | see [production env](#production-env) |
+| Required config | `ORIGIN` | see [environment](#environment) |
 
 Production mode **fails closed**: if Postgres, the signing secret or MCP auth are missing, the app refuses to start the affected paths and `/readyz` returns `503`.
 
@@ -35,7 +35,7 @@ docker run -d --name eigen-beam \
 - All state lives on the `/data` volume: decks, assets, follows and the mail outbox.
 - `ORIGIN` must be the public URL people use, including scheme. Form and upload POSTs are rejected otherwise.
 - Put a TLS-terminating reverse proxy in front (Caddy, nginx, Traefik). It must not buffer `text/event-stream` responses, or live sync stalls. For nginx: `proxy_buffering off;` on the app location.
-- The image has a `HEALTHCHECK` against `/healthz`.
+- The image has a liveness `HEALTHCHECK` against `/healthz`. Configure the platform's traffic-readiness probe against `/readyz`.
 
 Without a mail provider, magic-link mails land in `/data/outbox` as JSON. That is fine for a single operator, not for public sign-ups.
 
@@ -51,11 +51,13 @@ docker run -d --name eigen-beam -p 3000:3000 \
   eigen-beam
 ```
 
-Run the migrations once per schema change, from a checkout with the same `DATABASE_URL`:
+The image runs pending migrations before the app starts. To run only migrations, use the same image and environment:
 
 ```bash
-DATABASE_URL=postgres://... bun run db:migrate
+docker run --rm --env-file eigenbeam.env eigen-beam migrate
 ```
+
+Set `EB_MIGRATE_ON_BOOT=false` only when a separate release step runs that command. A migration failure stops boot with exit code 1.
 
 ## Option C: Railway
 
@@ -63,13 +65,13 @@ The reference instance runs on Railway; nothing in the code depends on it.
 
 1. Create a project with a Postgres database and a bucket (Railway Buckets are S3-compatible).
 2. Add a service from this repository. Railway detects the `Dockerfile`. (The image declares no Docker `VOLUME`; Railway rejects those. In production mode nothing needs a volume. For minimal mode, attach a Railway Volume at `/data`.)
-3. Set the [production env](#production-env). Railway's Postgres provides `DATABASE_URL`.
-4. Run `bun run db:migrate` against the database (for example with `railway run bun run db:migrate`).
+3. Set the [environment](#environment). Railway's Postgres provides `DATABASE_URL`.
+4. Set Railway's healthcheck path to `/readyz`; the image applies migrations before it accepts traffic.
 5. Point the [watchdog](operations.md#watchdog) at the public URL if you want scheduled health checks.
 
 Any other platform with long-lived Node processes works the same way (Fly.io, Render, a VM). Serverless platforms do not: they cut SSE streams and lose in-memory rooms.
 
-## Production env
+## Environment
 
 Never put real values into issues, logs or docs. `.env.example` lists every variable with comments.
 
@@ -130,6 +132,18 @@ EB_OAUTH_CLIENTS=client-id:client-secret|deck:read+room:create
 
 Scopes: `deck:read`, `deck:write`, `room:create`, `asset:upload`. See [`mcp.md`](mcp.md).
 
+**Release and rollout controls**
+
+| Variable | Default | Meaning |
+|---|---:|---|
+| `EB_MIGRATE_ON_BOOT` | `true` | Run pending migrations before the image starts the app. `false` delegates migrations to a separate release step. |
+| `EB_OAUTH_AUTH_CODE` | `false` | Authorization-code OAuth rollout guard. Keep `false` until the supported-client matrix is green. |
+| `EB_QUOTA_DECKS_PER_USER` | unset | Optional positive integer. Unset disables the per-user deck quota. |
+| `EB_DEMO_DECK_TTL_DAYS` | unset | Optional positive integer. Unset disables demo-deck cleanup; default boot starts no deletion job. |
+| `EB_DEFAULT_LOCALE` | `en` | Default locale when a client does not provide one. |
+
+Boot validates the full configuration and reports every missing or invalid variable name in one secret-safe error. It also exits with code 1 if a configured local data directory is not writable.
+
 **Optional AI**
 
 ```text
@@ -148,7 +162,7 @@ bun run verify:c1a
 bun run build
 ```
 
-If the schema changed: `bun run db:migrate`.
+For a checkout-based deployment, run `bun run db:migrate`. The Docker image performs the same migration automatically unless `EB_MIGRATE_ON_BOOT=false`.
 
 After deploying, against your instance:
 

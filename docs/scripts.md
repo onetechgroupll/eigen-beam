@@ -8,7 +8,7 @@ All commands are run from the repository root.
 | `bun run doctor` | Check local tool/env readiness. | No secrets printed; warnings are non-fatal. |
 | `bun run docs:check` | Validate Markdown links/fences plus JSON/YAML shape. | Fast docs-only gate; also used by CI docs-only path. |
 | `bun run check` | `svelte-kit sync` + `svelte-check`. | Canonical type/a11y gate. |
-| `bun run verify:c1a` | Repository assertion suite. | Expected: `ALL PASS — 83 assertions.` |
+| `bun run verify:c1a` | Repository assertion suite. | Expected: `ALL PASS — 91 assertions.` |
 | `bun run build` | Production SvelteKit adapter-node build. | Clean stale build artifacts if chunk resolution fails. |
 | `bun run start` | Run `node build`. | Requires prior `bun run build`. |
 | `bun run preview` | Alias for `node build`. | Same as `start`. |
@@ -16,6 +16,7 @@ All commands are run from the repository root.
 | `bun run smoke:replay` | Replay/follow-up smoke against `EB_SMOKE_BASE`. | Needs production server running. |
 | `bun run smoke:ops` | Health/readiness/OAuth metadata smoke. | Defaults to `http://127.0.0.1:4176` if `EB_SMOKE_BASE` is not set. |
 | `bun run smoke:mcp` | Repo-local MCP wrapper smoke. | Mutating tool calls require `EB_MCP_SMOKE_MUTATE=1`. |
+| `bun run smoke:release` | Docker/Postgres release smoke. | Supports `--image`, `--baseline-tag` and `--keep`; see [`testing.md`](testing.md#release-smoke). |
 | `bun run qa:mobile` | Mobile QA Lab. | Captures screenshots and `results.json`. |
 | `bun run watchdog:prod` | Ops smoke for a deployed instance. | Alias for `scripts/smoke-ops.ts`; set `EB_SMOKE_BASE`. |
 | `bun run db:migrate` | Run database migrations. | Requires `DATABASE_URL`. |
@@ -33,6 +34,11 @@ All commands are run from the repository root.
 | `EB_MAIL_PROVIDER` | auth/follow | `outbox`, `console`, `resend`, `postmark`. |
 | `EB_MAGIC_LINK_SECRET` | auth | Required for production-like auth. |
 | `DATABASE_URL` | migrations/postgres | Required for Postgres modes. |
+| `EB_MIGRATE_ON_BOOT` | image boot | Defaults to `true`; `false` skips automatic migrations. |
+| `EB_OAUTH_AUTH_CODE` | OAuth rollout | Defaults to `false` until the supported-client matrix is green. |
+| `EB_QUOTA_DECKS_PER_USER` | rollout config | Optional positive integer; unset disables the quota. |
+| `EB_DEMO_DECK_TTL_DAYS` | rollout config | Optional positive integer; unset starts no cleanup job. |
+| `EB_DEFAULT_LOCALE` | app defaults | Defaults to `en`. |
 | `EB_MCP_TOKEN`, `EB_MCP_TOKENS` | MCP | Bearer token(s) for `/mcp`. |
 | `EB_MCP_TOKEN_FILE` | MCP wrapper | Local ignored token file path. |
 

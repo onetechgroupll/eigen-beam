@@ -20,6 +20,7 @@
     "smoke:ops": "bun scripts/smoke-ops.ts",
     "watchdog:prod": "bun scripts/smoke-ops.ts",
     "smoke:mcp": "bun scripts/smoke-mcp.ts",
+    "smoke:release": "node scripts/release-smoke.mjs",
     "db:migrate": "bun scripts/migrate.ts"
   },
   "devDependencies": {

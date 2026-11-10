@@ -31,7 +31,7 @@ bun run build
 Expected current repository verification:
 
 ```text
-ALL PASS — 83 assertions.
+ALL PASS — 91 assertions.
 ```
 
 ## Local production smoke
@@ -68,6 +68,18 @@ EB_SMOKE_BASE=http://127.0.0.1:4316 bun run smoke:ops
 | `smoke:replay` | Room lifecycle, presenter sync, viewer events, replay APIs, follow/magic-link/outbox and auth edge cases. |
 | `smoke:ops` | `/healthz`, `/readyz`, MCP protected-resource metadata. |
 | `smoke:mcp` | Repo-local MCP wrapper, `initialize`, `tools/list`; optional mutating calls with `EB_MCP_SMOKE_MUTATE=1`. |
+
+## Release smoke
+
+The release smoke needs Docker and pulls/starts PostgreSQL. It builds the current image by default:
+
+```bash
+node scripts/release-smoke.mjs
+```
+
+Use `--image <name>` for an already-built image. `--baseline-tag <tag>` prepares the upgrade database with a historical GHCR image instead of the deterministic `001_foundation.sql` baseline. `--keep` preserves the disposable containers and network for inspection. Run `node scripts/release-smoke.mjs --help` for the complete option contract.
+
+It verifies empty-database boot, a seeded upgrade, two parallel boots, bounded held-lock failure and unwritable-data boot failure. The tag release workflow runs it before publishing multi-platform images.
 
 ## Mobile QA Lab
 
