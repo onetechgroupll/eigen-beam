@@ -4,6 +4,19 @@ Semver tags publish a GHCR image and a GitHub release. Each versioned section in
 
 ## [Unreleased]
 
+_Nothing yet on the next wave. The roadmap lives in [ROADMAP.md](ROADMAP.md)._
+
+## v0.1.0
+
+First versioned open-source release: the complete product — live-sync presentations steered from a phone, audience signals, replay and MCP — plus everything a self-hoster needs. Highlights of this release:
+
+### Upgrade notes
+
+- The container now migrates Postgres on boot by default. Set `EB_MIGRATE_ON_BOOT=false` only when a separate release step runs the image's `migrate` command.
+- Production boot validates all required environment variables together and no longer falls back to volatile deck storage when a configured data directory is not writable.
+
+### Changed
+
 ### Upgrade notes
 
 - The container now migrates Postgres on boot by default. Set `EB_MIGRATE_ON_BOOT=false` only when a separate release step runs the image's `migrate` command.
