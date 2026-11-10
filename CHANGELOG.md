@@ -4,6 +4,8 @@ This project does not currently publish formal versioned releases. This changelo
 
 ## Unreleased / current main
 
+- Markdown export and cloning now roundtrip all six slide types without losing number or quote content, escape reserved body syntax, and keep original source with speaker notes available only to the owner export.
+- An explicit `type: text` now keeps an attached image inline instead of switching the slide to the full-bleed image layout.
 - Open-sourced under the MIT License.
 - New README with animated graphics (`tools/readme/build.py`), self-hosting guide, `Dockerfile` and English documentation throughout.
 - Architecture decision records (`docs/adr/`), public `ROADMAP.md` and `docs/design-system.md` replace the internal design and roadmap briefs.

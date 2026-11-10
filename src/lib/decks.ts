@@ -1,6 +1,8 @@
 // Slide-/Deck-Schema für eigen.beam.
 // Content-First bleibt die Grundform; C3 ergänzt blockartige Präsentations-Typen,
 // ohne in einen Freiform-WYSIWYG abzurutschen.
+import { escapeBodyLines } from './deck-parse';
+
 export type SlideKind = 'text' | 'number' | 'quote' | 'image' | 'compare' | 'timeline';
 
 export type CompareBlock = {
@@ -44,19 +46,20 @@ export function publicSlidesToSource(slides: PublicSlide[]): string {
 	return slides.map((slide) => {
 		const lines: string[] = [];
 		if (slide.kind && slide.kind !== 'text') lines.push(`type: ${slide.kind}`);
-		if (slide.eyebrow) lines.push(slide.eyebrow);
+		else if (slide.image) lines.push('type: text');
+		if (slide.eyebrow) lines.push(`eyebrow: ${slide.eyebrow}`);
+		if (slide.metric) lines.push(`metric: ${slide.metric}`);
+		if (slide.quote) lines.push(`quote: ${slide.quote}`);
+		if (slide.attribution) lines.push(`attribution: ${slide.attribution}`);
 		lines.push(`# ${slide.headline}`);
-		if (slide.body) lines.push(slide.body);
-		if (slide.metric) lines.push(slide.metric);
-		if (slide.quote) lines.push(`“${slide.quote}”`);
-		if (slide.attribution) lines.push(`— ${slide.attribution}`);
+		if (slide.image) lines.push(`![](${slide.image})`);
+		if (slide.body) lines.push(escapeBodyLines(slide.body));
 		if (slide.compare) {
 			lines.push(`left: ${slide.compare.leftTitle}${slide.compare.leftBody ? ` | ${slide.compare.leftBody}` : ''}`);
 			lines.push(`right: ${slide.compare.rightTitle}${slide.compare.rightBody ? ` | ${slide.compare.rightBody}` : ''}`);
 		}
 		if (slide.timeline) for (const item of slide.timeline) lines.push(`- ${item.label}: ${item.text}`);
 		if (slide.reveal) for (const item of slide.reveal) lines.push(`++ ${item}`);
-		if (slide.image) lines.push(`![](${slide.image})`);
 		return lines.join('\n');
 	}).join('\n\n---\n\n');
 }
