@@ -4,6 +4,7 @@ This project does not currently publish formal versioned releases. This changelo
 
 ## Unreleased / current main
 
+- Contributor operations: every roadmap item now points to an issue brief, field-session friction has a reusable template, and a daily workflow records passive GitHub adoption metrics on a dedicated data branch without adding app telemetry.
 - Open-sourced under the MIT License.
 - New README with animated graphics (`tools/readme/build.py`), self-hosting guide, `Dockerfile` and English documentation throughout.
 - Architecture decision records (`docs/adr/`), public `ROADMAP.md` and `docs/design-system.md` replace the internal design and roadmap briefs.

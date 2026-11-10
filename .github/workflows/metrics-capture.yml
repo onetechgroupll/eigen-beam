@@ -1,0 +1,151 @@
+name: Capture adoption metrics
+
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+
+# METRICS_TOKEN is a fine-grained, repository-scoped, read-only token with
+# Contents and Metadata read access; no write access is needed on this token.
+# The short-lived GITHUB_TOKEN writes only the generated CSV to data/metrics.
+permissions:
+  contents: write
+
+concurrency:
+  group: metrics-capture
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    name: append passive GitHub metrics
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+    steps:
+      - name: Check metrics token
+        id: token
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$METRICS_TOKEN" ]]; then
+            echo "::notice title=Metrics capture skipped::METRICS_TOKEN is not configured. Passive GitHub stars, forks, watchers, traffic, issues, and outside pull requests were not captured."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: Read GitHub metrics
+        if: steps.token.outputs.available == 'true'
+        id: metrics
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.METRICS_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          repository="$(gh api "repos/$GITHUB_REPOSITORY")"
+          # Traffic endpoints need elevated token scopes; a 403 degrades to empty
+          # columns + a notice instead of reddening the daily job.
+          if views="$(gh api "repos/$GITHUB_REPOSITORY/traffic/views?per=day" 2>/dev/null)"; then
+            :
+          else
+            views='{"count":"","uniques":""}'
+            echo "::notice title=Traffic unavailable::The views API was not readable with METRICS_TOKEN; views columns stay empty for this row."
+          fi
+          if clones="$(gh api "repos/$GITHUB_REPOSITORY/traffic/clones?per=day" 2>/dev/null)"; then
+            :
+          else
+            clones='{"count":"","uniques":""}'
+            echo "::notice title=Traffic unavailable::The clones API was not readable with METRICS_TOKEN; clones columns stay empty for this row."
+          fi
+
+          date="$(date -u +%F)"
+          stars="$(jq -r '.stargazers_count' <<< "$repository")"
+          forks="$(jq -r '.forks_count' <<< "$repository")"
+          watchers="$(jq -r '.subscribers_count' <<< "$repository")"
+          views_14d="$(jq -r '.count' <<< "$views")"
+          unique_views_14d="$(jq -r '.uniques' <<< "$views")"
+          clones_14d="$(jq -r '.count' <<< "$clones")"
+          unique_clones_14d="$(jq -r '.uniques' <<< "$clones")"
+          open_issues="$(gh api -X GET search/issues -f q="repo:$GITHUB_REPOSITORY is:issue is:open" --jq '.total_count')"
+          open_non_maintainer_prs="$(
+            gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" \
+              --jq '[.[][] | select(.author_association != "OWNER" and .author_association != "MEMBER" and .author_association != "COLLABORATOR")] | length'
+          )"
+
+          # GHCR pulls and template deploys: once image exists. Until then,
+          # both columns stay empty instead of reporting a synthetic zero.
+          row="$date,$stars,$forks,$watchers,$views_14d,$unique_views_14d,$clones_14d,$unique_clones_14d,$open_issues,$open_non_maintainer_prs,,"
+          echo "date=$date" >> "$GITHUB_OUTPUT"
+          echo "row=$row" >> "$GITHUB_OUTPUT"
+
+      - name: Append CSV row on data branch
+        if: steps.token.outputs.available == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          METRICS_DATE: ${{ steps.metrics.outputs.date }}
+          METRICS_ROW: ${{ steps.metrics.outputs.row }}
+        run: |
+          set -euo pipefail
+
+          branch='data/metrics'
+          encoded_branch='data%2Fmetrics'
+          header='date,stars,forks,watchers,views_14d,unique_views_14d,clones_14d,unique_clones_14d,open_issues,open_non_maintainer_prs,ghcr_pulls,template_deploys'
+          bot_email='41898282+github-actions[bot]@users.noreply.github.com'
+
+          if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$encoded_branch" >/dev/null 2>&1; then
+            main_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/heads/$branch" \
+              -f sha="$main_sha" >/dev/null 2>&1 || true
+          fi
+
+          for attempt in 1 2 3 4; do
+            current_sha=''
+            if response="$(gh api "repos/$GITHUB_REPOSITORY/contents/data/metrics.csv?ref=$encoded_branch" 2>/dev/null)"; then
+              current_sha="$(jq -r '.sha' <<< "$response")"
+              jq -r '.content' <<< "$response" | tr -d '\n' | base64 --decode > "$RUNNER_TEMP/metrics.csv"
+            else
+              printf '%s\n' "$header" > "$RUNNER_TEMP/metrics.csv"
+            fi
+
+            if grep -q "^$METRICS_DATE," "$RUNNER_TEMP/metrics.csv"; then
+              echo "::notice title=Metrics already captured::data/metrics already contains a row for $METRICS_DATE."
+              exit 0
+            fi
+
+            printf '%s\n' "$METRICS_ROW" >> "$RUNNER_TEMP/metrics.csv"
+            content="$(base64 < "$RUNNER_TEMP/metrics.csv" | tr -d '\n')"
+
+            if [[ -n "$current_sha" ]]; then
+              jq -n \
+                --arg message "Capture adoption metrics for $METRICS_DATE" \
+                --arg content "$content" \
+                --arg branch "$branch" \
+                --arg sha "$current_sha" \
+                --arg email "$bot_email" \
+                '{message: $message, content: $content, branch: $branch, sha: $sha, author: {name: "github-actions", email: $email}, committer: {name: "github-actions", email: $email} }' \
+                > "$RUNNER_TEMP/metrics-payload.json"
+            else
+              jq -n \
+                --arg message "Capture adoption metrics for $METRICS_DATE" \
+                --arg content "$content" \
+                --arg branch "$branch" \
+                --arg email "$bot_email" \
+                '{message: $message, content: $content, branch: $branch, author: {name: "github-actions", email: $email}, committer: {name: "github-actions", email: $email} }' \
+                > "$RUNNER_TEMP/metrics-payload.json"
+            fi
+
+            if gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/data/metrics.csv" \
+              --input "$RUNNER_TEMP/metrics-payload.json" >/dev/null 2>&1; then
+              echo "Appended $METRICS_DATE to data/metrics:data/metrics.csv"
+              exit 0
+            fi
+
+            echo "::notice title=Concurrent metrics update::The data branch changed during capture; re-reading it and appending this row without rebasing (attempt $attempt of 4)."
+          done
+
+          echo "::error title=Metrics capture conflict::Could not append after four fresh reads of data/metrics. No force-push was attempted."
+          exit 1
