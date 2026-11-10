@@ -19,7 +19,7 @@ Cheap liveness: no database or provider calls. Use it for load balancer and cont
 
 ### `/readyz`
 
-Sanitised readiness. In production mode it checks the fail-closed configuration and, when Postgres is required, runs `SELECT 1`. The body contains status, modes and check details, never secret values, URLs or tokens.
+Sanitised readiness. In production mode it checks the fail-closed configuration and compares the latest applied `schema_migrations` filename with the version expected by the running code. Every check has `status`, `expected`, `actual` and `fix`; fix text contains only environment-variable names and the deployment-documentation link, never values.
 
 Production mode expects, among others:
 
@@ -29,12 +29,30 @@ Production mode expects, among others:
 - `DATABASE_URL` set and reachable
 - `EB_ASSET_STORE=s3` with `EB_BUCKET_NAME`
 - `EB_MAIL_PROVIDER=resend|postmark` with its credential
-- `EB_MCP_TOKEN` or `EB_MCP_TOKENS`
+- `EB_MCP_TOKEN`, `EB_MCP_TOKENS`, or OAuth-only configuration through `EB_OAUTH_CLIENTS` plus `EB_OAUTH_TOKEN_SECRET`
 
 | Response | Meaning |
 |---|---|
 | `200`, `ok: true` | ready for traffic |
 | `503`, `ok: false` | not ready; the body names the failing check without secrets |
+
+Use `/healthz` for process liveness. Use `/readyz` for Railway, Compose or any load-balancer probe that decides whether the instance may receive traffic.
+
+## Migration failures
+
+The image and `bun run db:migrate` use the same runner. It takes a fixed Postgres session advisory lock on one dedicated client, applies one transaction per file and records the filename only in that transaction. Lock acquisition has three bounded attempts; statement execution also has a session timeout.
+
+Failure logs have one stable line:
+
+```text
+EB_MIGRATE_FAILED migration=<filename-or-lock> cause=<postgres-code>
+```
+
+1. Keep the failed instance out of traffic and inspect that line. `cause=55P03` means another migrator held the lock for the full retry window.
+2. Confirm whether the other deploy is still migrating. Retry the same image after it finishes; already-recorded files are skipped.
+3. For a SQL error, restore or correct the database according to [`upgrading.md`](upgrading.md), then rerun the same image's `migrate` command. Do not edit `schema_migrations` by hand.
+
+The rollback window stays open only while all migrations since the previous version are additive and the old binary can read the new schema. Once a non-additive migration runs or new-version writes cross that compatibility boundary, restore the pre-upgrade backup instead of redeploying the old image.
 
 ## Ops smoke
 

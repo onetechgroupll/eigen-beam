@@ -23,11 +23,15 @@ ENV HOST=0.0.0.0 \
     PORT=3000 \
     EB_DATA_DIR=/data \
     EB_ASSET_DIR=/data/assets \
-    EB_FOLLOWS_FILE=/data/follows.json
+    EB_FOLLOWS_FILE=/data/follows.json \
+    EB_MIGRATE_ON_BOOT=true \
+    EB_OAUTH_AUTH_CODE=false \
+    EB_DEFAULT_LOCALE=en
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/build ./build
 COPY --from=build /app/migrations ./migrations
+COPY --from=build /app/scripts/entrypoint.mjs /app/scripts/env-validation.mjs /app/scripts/migration-contract.mjs /app/scripts/migrate-core.mjs /app/scripts/migrate.mjs ./scripts/
 RUN mkdir -p /data && chown node:node /data
 # No VOLUME instruction: Railway rejects it (use Railway Volumes). Mount /data
 # with `docker run -v` or your platform's volume feature instead.
@@ -35,4 +39,5 @@ USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+ENTRYPOINT ["node", "scripts/entrypoint.mjs"]
 CMD ["node", "build"]

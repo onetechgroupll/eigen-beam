@@ -1,8 +1,20 @@
 # Changelog
 
-This project does not currently publish formal versioned releases. This changelog tracks major repo/product milestones at a human-readable level.
+Semver tags publish a GHCR image and a GitHub release. Each versioned section includes upgrade notes for operators.
 
-## Unreleased / current main
+## [Unreleased]
+
+### Upgrade notes
+
+- The container now migrates Postgres on boot by default. Set `EB_MIGRATE_ON_BOOT=false` only when a separate release step runs the image's `migrate` command.
+- Production boot validates all required environment variables together and no longer falls back to volatile deck storage when a configured data directory is not writable.
+
+### Changed
+
+- Added the semver-tag release workflow for multi-platform public GHCR images and GitHub Releases.
+- Added advisory-locked, transactional migrations with bounded retries and a Node-compatible runtime runner.
+- Added schema-aware readiness checks with OAuth-only MCP support and secret-safe per-check remediation.
+- Added the Docker/Postgres release smoke and operator upgrade/rollback documentation.
 
 - Markdown export and cloning now roundtrip all six slide types without losing number or quote content, escape reserved body syntax, and keep original source with speaker notes available only to the owner export.
 - An explicit `type: text` now keeps an attached image inline instead of switching the slide to the full-bleed image layout.

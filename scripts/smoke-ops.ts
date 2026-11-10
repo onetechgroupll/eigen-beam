@@ -24,11 +24,11 @@ async function fetchJson(path: string): Promise<{ response: Response; body: Reco
 	return { response, body, raw };
 }
 
-function assertSecretSafe(raw: string) {
+function assertSecretSafe(raw: string, allowEnvironmentNames = false) {
 	assert.equal(/postgres:\/\//i.test(raw), false, 'must not leak DATABASE_URL');
 	assert.equal(/resend_[A-Za-z0-9_-]+/i.test(raw), false, 'must not leak Resend key');
-	assert.equal(/postmark|token_[A-Za-z0-9_-]{8,}/i.test(raw), false, 'must not leak token material');
-	assert.equal(/EB_[A-Z0-9_]+/.test(raw), false, 'must not expose env var names');
+	assert.equal(/postmark_[A-Za-z0-9_-]+|token_[A-Za-z0-9_-]{8,}/i.test(raw), false, 'must not leak token material');
+	if (!allowEnvironmentNames) assert.equal(/EB_[A-Z0-9_]+/.test(raw), false, 'must not expose env var names');
 }
 
 async function main() {
@@ -46,7 +46,7 @@ async function main() {
 	assert.equal(ready.response.headers.get('cache-control'), 'no-store');
 	assert.equal(ready.body.service, 'eigenbeam');
 	assert.equal(typeof ready.body.checks, 'object');
-	assertSecretSafe(ready.raw);
+	assertSecretSafe(ready.raw, true);
 	if (EXPECT_READY) {
 		assert.equal(ready.response.status, 200, '/readyz → 200');
 		assert.equal(ready.body.ok, true, '/readyz ok=true');
