@@ -32,8 +32,8 @@ The plan behind this list, with waves and reasoning, is in [`docs/designs/oss-ad
 The "MCP for every AI client" wave only starts after a go/no-go decision 30 days after launch, measured against the fixed thresholds below. See [the adoption design](docs/designs/oss-adoption.md) for the reasoning.
 
 1. **Community engagement:** At least 5 issues or pull requests opened by people outside the maintainer team within the first 30 days after launch, excluding spam, duplicates and `wontfix` items.
-2. **Self-hosting signal:** At least 10 combined GHCR image pulls and template deploys.
-3. **Field sessions:** At least 3 documented sessions in front of a real audience, recorded in session notes or issues labelled `field`.
+2. **Self-hosting signal:** At least 10 combined GHCR image pulls and template deploys, read from the GHCR package page and the template's deploy counter.
+3. **Field sessions:** At least 3 documented sessions in front of a real audience by day 30, recorded in session notes or issues labelled `field`; the pre-launch field sessions count.
 
 Go requires all three criteria. On no-go, "MCP for every client" is dropped from the plan and the bearer-token MCP endpoint stays as is. The day-90 metrics check can reopen it as a fresh decision.
 
