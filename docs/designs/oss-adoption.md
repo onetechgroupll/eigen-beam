@@ -15,7 +15,7 @@ Today the gaps are on that path, not in the product:
 
 ## How we measure it
 
-Passive numbers only, no telemetry inside instances: GitHub stars, forks, views and clones, GHCR image pulls, Railway template deploys, and issues or pull requests from people outside the project. A daily workflow records them because GitHub keeps traffic data for 14 days. Check-ins at 30 and 90 days after the first release. Baseline on 2026-11-09: all zero.
+Passive numbers only, no telemetry inside instances: GitHub stars, forks, views and clones, GHCR image pulls, Railway template deploys, and issues or pull requests from people outside the project. They are read directly at the day-30 and day-90 gates (public counters and the GHCR package page); the earlier daily capture workflow was removed to keep the repository free of token-based secrets, so traffic views and clones — which GitHub only keeps for 14 days — are not recorded historically. Baseline on 2026-11-09: all zero.
 
 ## Plan
 
@@ -24,7 +24,7 @@ Waves are ordered by technical dependency. Inside a wave, issues and pull reques
 | Wave | Work | Done when |
 |---|---|---|
 | Hotfix (done) | Current AI default | Shipped in #9: one default model constant (`claude-opus-5-5`), and the editor says why the AI pass fell back to the local layout |
-| W0 | Roadmap as issues + metrics capture | Every roadmap item, including deferred ones, is an issue with `good first issue` / `help wanted` labels; daily capture runs |
+| W0 | Roadmap as issues + metrics capture | Every roadmap item, including deferred ones, is an issue with `good first issue` / `help wanted` labels; daily capture ran (later removed, see the changelog) |
 | W0 | End button in the presenter remote | The remote ends the session after a confirmation; viewers see the end screen with the replay link |
 | W0 | Lossless export and clone | `parseDeck(export(deck))` equals the deck's public slides for every slide type; owners can export their original source including notes; non-owners never receive notes. Uploaded images stay bound to the instance and the docs say so |
 | W1 | Releases and a public image | A version tag builds a public GHCR image and a GitHub release with changelog; the image migrates the database on boot (with a lock); `/readyz` checks the schema version; the release smoke boots against an empty database |
