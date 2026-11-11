@@ -4,7 +4,7 @@ Semver tags publish a GHCR image and a GitHub release. Each versioned section in
 
 ## [Unreleased]
 
-_Nothing yet on the next wave. The roadmap lives in [ROADMAP.md](ROADMAP.md)._
+- Added a 60-second demo GIF to the README: presenter swipes on a phone, the room screen and every audience phone follow in sync, a question arrives, the session ends with a replay.
 
 ## v0.1.0
 

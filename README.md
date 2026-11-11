@@ -18,6 +18,10 @@
 
 It is built for the meetings where there is no screen: client pitches, offsites, standing updates, restaurant backrooms. A PDF sent afterwards cannot make everyone look at the same slide while you talk. eigen.beam can.
 
+<p align="center">
+  <img alt="60-second demo: the presenter swipes on a phone, the room screen and every audience phone follow in sync, a question arrives, the session ends with a replay." src="./docs/assets/readme/demo.gif" width="100%">
+</p>
+
 > [!NOTE]
 > The app UI is available in **English and German**. It follows the browser language by default, and the persistent language switcher is available in the footer and account area. Deck content is never translated.
 
