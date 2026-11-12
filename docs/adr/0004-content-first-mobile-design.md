@@ -15,6 +15,8 @@ The "screen" is a phone held at arm's length, in rooms with unknown light. Anyth
 - Live features are overlays or asynchronous; they never become a panel next to the slide.
 - Not building: a free-form WYSIWYG editor, heavy polls or quizzes, enterprise branding.
 
+Q&A moderation stays on the presenter surface: presenters can star, mark done, hide and export questions. Audience-side voting, upvoting or ranked question lists are out of scope and will not be built.
+
 Details: [`../design-system.md`](../design-system.md).
 
 ## Consequences

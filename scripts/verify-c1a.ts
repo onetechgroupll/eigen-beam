@@ -16,7 +16,8 @@ import { localClarify } from '../src/lib/server/clarity.ts';
 import Anthropic from '@anthropic-ai/sdk';
 import { DEFAULT_CLAUDE_MODEL, claudeModel, parseDeckJson, requestDeckJson } from '../src/lib/server/claude.ts';
 import { sniffImage, S3AssetStore } from '../src/lib/server/assets.ts';
-import { claimPresenterToken, createRoom, endRoom, ENDED_ROOM_TTL_MS, evictRoomForCapacity, getReplay, getRoom, recordViewerEvent, removeRoom, resolveEndedRoomTiming, setSlide, sweepRooms } from '../src/lib/server/rooms.ts';
+import { claimPresenterToken, createRoom, endRoom, ENDED_ROOM_TTL_MS, evictRoomForCapacity, getReplay, getRoom, listPresenterQuestions, moderateQuestion, recordViewerEvent, removeRoom, resolveEndedRoomTiming, setSlide, sweepRooms } from '../src/lib/server/rooms.ts';
+import { questionExportMarkdown } from '../src/lib/server/question-export.ts';
 import { createUnsubToken, escapeHtml, recordFollow, recordFollowDetailed, sanitizeFollowTarget, verifyUnsubToken } from '../src/lib/server/followers.ts';
 import { devLoginLine, OutboxEmailProvider, getMailerForEnv, readOutbox } from '../src/lib/server/mailer.ts';
 import { PostgresActivityStore } from '../src/lib/server/activity-store.ts';
@@ -1076,9 +1077,40 @@ Kurz.`;
 		recordViewerEvent(id, { type: 'reaction', reaction: '🔥', slide: 1 });
 		recordViewerEvent(id, { type: 'question', text: 'Geheime Frage', slide: 1 });
 		recordViewerEvent(id, { type: 'bookmark', slide: 1 });
+		const initialQuestions = listPresenterQuestions(id, presenterToken);
+		assert.equal(initialQuestions.ok, true);
+		assert.equal(initialQuestions.questions?.length, 1);
+		const moderatedQuestion = initialQuestions.questions![0];
+		assert.match(moderatedQuestion.id, /^[A-Za-z0-9_-]{10}$/);
+		assert.equal(moderatedQuestion.status, 'open');
+		assert.equal(moderateQuestion(id, presenterToken, moderatedQuestion.id, { status: 'starred' }).question?.status, 'starred');
+		assert.equal(moderateQuestion(id, presenterToken, moderatedQuestion.id, { status: 'done' }).question?.status, 'done');
+		assert.equal(moderateQuestion(id, presenterToken, moderatedQuestion.id, { status: 'open' }).question?.status, 'open');
+		assert.equal(moderateQuestion(id, presenterToken, moderatedQuestion.id, { hidden: true }).question?.hidden, true);
+		assert.equal(moderateQuestion(id, presenterToken, moderatedQuestion.id, { hidden: false }).question?.hidden, undefined);
+		assert.equal(moderateQuestion(id, presenterToken, 'unknown-id', { status: 'done' }).status, 404);
+		assert.equal(moderateQuestion(id, presenterToken, '../invalid', { status: 'done' }).status, 404);
+		assert.equal(moderateQuestion(id, 'wrong-token', moderatedQuestion.id, { status: 'done' }).status, 403);
+		ok('Fragenmoderation durchläuft open → starred → done → open, Hide ist reversibel und unbekannte IDs liefern 404');
+
+		const exportQuestions = [
+			{ id: 'open', text: 'Open', slide: 0, ts: 2, status: 'open' as const },
+			{ id: 'starred', text: 'Starred', slide: 0, ts: 3, status: 'starred' as const },
+			{ id: 'next', text: 'Next slide', slide: 1, ts: 1, status: 'done' as const },
+			{ id: 'hidden', text: 'Hidden starred', slide: 0, ts: 1, status: 'starred' as const, hidden: true }
+		];
+		const publicQuestionExport = questionExportMarkdown(exportQuestions, { heading: 'Questions', slide: 'Slide' });
+		assert.ok(publicQuestionExport.indexOf('Starred') < publicQuestionExport.indexOf('Open'));
+		assert.ok(publicQuestionExport.indexOf('## Slide 1') < publicQuestionExport.indexOf('## Slide 2'));
+		assert.match(publicQuestionExport, /\[1970-01-01T00:00:00\.003Z\]/);
+		assert.doesNotMatch(publicQuestionExport, /Hidden starred/);
+		const completeQuestionExport = questionExportMarkdown(exportQuestions, { heading: 'Questions', slide: 'Slide' }, true);
+		assert.ok(completeQuestionExport.indexOf('Hidden starred') < completeQuestionExport.indexOf('Starred'));
+		ok('Fragenexport gruppiert nach Folie, sortiert Gemerkte zuerst, enthält Zeitstempel und schließt Hidden standardmäßig aus');
+
 		const firstEnd = endRoom(id, presenterToken);
 		assert.equal(firstEnd.ok, true);
-		assert.deepEqual(firstEnd.questions, [{ text: 'Geheime Frage', slide: 1, ts: firstEnd.questions?.[0]?.ts }]);
+		assert.deepEqual(firstEnd.questions, [{ ...moderatedQuestion }]);
 		assert.equal(firstEnd.endedAt, getRoom(id)?.endedAt);
 		assert.deepEqual(firstEnd.stats, getRoom(id)?.stats);
 		const secondEnd = endRoom(id, presenterToken);
@@ -1093,6 +1125,8 @@ Kurz.`;
 		assert.ok(replay.events.some((e) => e.type === 'slide' && e.slide === 1));
 		assert.ok(replay.events.some((e) => e.type === 'end'));
 		assert.equal(replay.events.filter((event) => event.type === 'end').length, 1);
+		const publicQuestion = replay.events.find((event) => event.type === 'question');
+		assert.deepEqual(publicQuestion, { type: 'question', text: '', slide: 1, ts: moderatedQuestion.ts });
 		ok('Replay/VOD hält Timeline vor und zweites Beenden liefert 410 already_ended');
 
 		const takeaway = buildTakeaway(replay);

@@ -171,9 +171,21 @@ Errors: `400` (no file), `413` (too large), `422` (no text found), `501` (voice 
 
 ### End a room
 
-`DELETE /present/:id/slide` → `{ ok: true, endedAt, stats, questions: [{ text, slide, ts }] }`. Presenter cookie required. The presenter-only question list lets **Export and end** use the complete server state without exposing question text through public replay routes. Viewers and presenter streams receive `ended` and close. Repeating the request for a retained ended room returns `410` with `{ error: true, code: "already_ended", message: "Session bereits beendet.", endedAt, stats, questions: [...] }`, so a lost first acknowledgement can be retried without inventing the end timestamp or counters client-side. Unknown rooms return `404`; wrong presenter cookies return `403`.
+`DELETE /present/:id/slide` → `{ ok: true, endedAt, stats, questions: [{ id, text, slide, ts, status, hidden? }] }`. Presenter cookie required. The presenter-only question list lets **Export and end** use the complete server state without exposing question text through public replay routes. Viewers and presenter streams receive `ended` and close. Repeating the request for a retained ended room returns `410` with `{ error: true, code: "already_ended", message: "Session bereits beendet.", endedAt, stats, questions: [...] }`, so a lost first acknowledgement can be retried without inventing the end timestamp or counters client-side. Unknown rooms return `404`; wrong presenter cookies return `403`.
 
-`GET /present/:id/questions` downloads the complete presenter-only question list as Markdown while the room is retained. It uses the same presenter cookie, returns `403` for the wrong cookie, `404` for an unknown room and `410` once the room has been removed after the ended-room retention window (a persisted replay may still exist). Public replay APIs continue to blank question text.
+`GET /present/:id/questions` downloads the presenter-only question list as Markdown while the room is retained. Questions are grouped by slide; starred questions come first within each slide, then timestamp order, and every line contains an ISO timestamp. Hidden questions are omitted by default; `?include=hidden` includes them. It uses the same presenter cookie, returns `403` for the wrong cookie, `404` for an unknown room and `410` once the room has been removed after the ended-room retention window (a persisted replay may still exist). Public replay APIs continue to blank question text.
+
+### Moderate presenter questions
+
+`GET /present/:id/questions/snapshot` → `{ questions: [{ id, text, slide, ts, status, hidden? }] }`, oldest first. `status` is `open`, `starred` or `done`. The presenter remote calls it once on every SSE connect or reconnect and merges buffered live events by `id`. Presenter cookie required; `403` for a wrong cookie, `404` for an unknown room.
+
+`PATCH /present/:id/questions/:questionId` changes presenter-only moderation state. Presenter cookie required.
+
+```json
+{ "status": "starred", "hidden": false }
+```
+
+Either field may be sent independently. Set `status` to `open` to reopen a starred or completed question; set `hidden` to `false` to unhide it. → `{ question }`. Errors: `400` invalid or empty update, `403` wrong presenter cookie, `404` unknown room or question ID. Moderation state is in-memory room state and is lost on restart; it never enters viewer or replay payloads.
 
 ### Presenter event stream
 
@@ -183,7 +195,8 @@ Errors: `400` (no file), `413` (too large), `422` (no text found), `501` (voice 
 |---|---|
 | `stats` | `{ stats: { joins, currentViewers, peakConcurrent, reopens, reactions, questions, bookmarks, startedAt } }` |
 | `reaction` | `{ reaction, slide, ts }` |
-| `question` | `{ text, slide, ts }` |
+| `question` | `{ id, text, slide, ts, status: "open" }` |
+| `question_moderation` | `{ question: { id, text, slide, ts, status, hidden? } }` |
 | `bookmark` | `{ slide, ts }` |
 | `ended` | `{ slide, ts }` |
 

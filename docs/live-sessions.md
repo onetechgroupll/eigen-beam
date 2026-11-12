@@ -49,6 +49,14 @@ Signals are anonymous: eigen.beam stores no viewer identity. The API also accept
 
 The remote's header shows how many viewers are connected (**● N live**) and the speaker notes for the current slide. Counts (**dabei**, **Fragen**, **Merker**, **Re-Open**) and the signal feed sit in the **Coach öffnen** panel, closed by default so the remote stays calm during the talk. `/present/:id/stats` has a larger field-test dashboard with peak concurrency and re-open rate.
 
+### Moderating questions
+
+**Fragen (n)** in the presenter topbar opens the question sheet. It lists questions oldest first and filters them into **Offen**, **Gemerkt** and **Erledigt**. The presenter can move a question between those states, hide or unhide it, and export the list. Hidden questions stay visible to the presenter as hidden, but the default export omits them; the explicit "with hidden" export includes them. Audience members never receive moderation state, and there is no voting, upvoting or audience-ranked question list.
+
+The remote fetches one presenter-only question snapshot whenever its SSE connection opens or reconnects, buffers live question events during that fetch and then merges both by question ID. This restores the complete list without a gap. Question text and moderation state are not shown on the stats page; it contains counts only.
+
+Question IDs and moderation state live only in the in-memory room. A server restart ends the room and loses open/starred/done/hidden state. The sheet names this limitation; moderation is deliberately not persisted into the replay.
+
 ## Ending a session
 
 A room ends when:
@@ -58,7 +66,7 @@ A room ends when:
 - the instance already holds 500 rooms and a new one starts (ended rooms are evicted first, then the least recently active room);
 - the server restarts or redeploys ([ADR 0002](adr/0002-in-memory-live-rooms.md)).
 
-The confirmation explains that every viewer moves to the end screen. If the room has questions, the presenter can choose **Exportieren und beenden** or explicitly end without an export. The client first waits for the successful `DELETE` (or its `410 already_ended` retry response), adopts the server-owned end summary and then starts the question download as a navigation. Offline and server errors keep the remote live and offer retry; the UI never claims the room ended before the server acknowledges it.
+The confirmation explains that every viewer moves to the end screen. If the room has questions, the presenter can choose **Exportieren und beenden** or explicitly end without an export. The client first waits for the successful `DELETE` (or its `410 already_ended` retry response), adopts the server-owned end summary and then starts the question download as a navigation. The Markdown groups questions by slide, puts starred questions first within each slide and includes timestamps. Offline and server errors keep the remote live and offer retry; the UI never claims the room ended before the server acknowledges it.
 
 Open viewer and presenter streams receive `ended` and close. A viewer that was offline at that moment receives the same one-shot `ended` event when EventSource reconnects. Viewers then see a dedicated end screen with **Replay ansehen** as the single primary action.
 

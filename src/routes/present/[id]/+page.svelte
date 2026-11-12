@@ -27,9 +27,21 @@
 	let endedAt = $state<number | null>(initial(() => data.endedAt));
 	let alreadyEnded = $state(false);
 	let questionsExported = $state(false);
+	type QuestionStatus = 'open' | 'starred' | 'done';
+	type PresenterQuestion = { id: string; text: string; slide: number; ts: number; status: QuestionStatus; hidden?: boolean };
+	let showQuestions = $state(false);
+	let questionFilter = $state<QuestionStatus>('open');
+	let unreadQuestions = $state(0);
+	let questionAnnouncement = $state('');
+	let updatingQuestionIds = $state<string[]>([]);
+	let syncingQuestions = false;
+	let questionSyncGeneration = 0;
+	let queuedQuestions: PresenterQuestion[] = [];
 	let joinDialog: HTMLDialogElement | undefined = $state();
 	let endDialog: HTMLDialogElement | undefined = $state();
+	let questionDialog: HTMLDialogElement | undefined = $state();
 	let joinTrigger: HTMLButtonElement | undefined = $state();
+	let questionTrigger: HTMLButtonElement | undefined = $state();
 	let sessionTrigger: HTMLButtonElement | undefined = $state();
 	let endTrigger: HTMLElement | undefined = $state();
 	const { locale, t } = useI18n();
@@ -41,6 +53,7 @@
 	let dashboard = $derived(liveStatsDashboard(stats, Date.now(), locale));
 	let checklist = $derived(fieldTestChecklist(stats, viewerUrl, locale));
 	let questionCount = $derived(Math.max(stats.questions, questions.length));
+	let filteredQuestions = $derived(questions.filter((question) => question.status === questionFilter));
 	let durationMinutes = $derived(Math.max(0, Math.round(((endedAt ?? Date.now()) - stats.startedAt) / 60_000)));
 
 	async function go(n: number) {
@@ -96,6 +109,61 @@
 		showJoin = false;
 		joinTrigger?.focus();
 	}
+	function openQuestions(trigger: HTMLButtonElement) {
+		questionTrigger = trigger;
+		unreadQuestions = 0;
+		showQuestions = true;
+		void tick().then(() => questionDialog?.showModal());
+	}
+	function closeQuestions() {
+		if (questionDialog?.open) questionDialog.close();
+		else handleQuestionsClosed();
+	}
+	function handleQuestionsClosed() {
+		showQuestions = false;
+		questionTrigger?.focus();
+	}
+	function mergeQuestions(base: PresenterQuestion[], incoming: PresenterQuestion[]): PresenterQuestion[] {
+		const byId = new Map(base.map((question) => [question.id, question]));
+		for (const question of incoming) byId.set(question.id, question);
+		return [...byId.values()].sort((a, b) => a.ts - b.ts || a.id.localeCompare(b.id));
+	}
+	async function syncQuestionSnapshot() {
+		const generation = ++questionSyncGeneration;
+		syncingQuestions = true;
+		queuedQuestions = [];
+		try {
+			const res = await fetch(`/present/${data.id}/questions/snapshot`, { headers: { accept: 'application/json' } });
+			const result = await res.json().catch(() => ({})) as { questions?: unknown };
+			const snapshot = readQuestions(result.questions);
+			if (generation === questionSyncGeneration && res.ok && snapshot) questions = mergeQuestions(snapshot, queuedQuestions);
+		} finally {
+			if (generation === questionSyncGeneration) {
+				questions = mergeQuestions(questions, queuedQuestions);
+				syncingQuestions = false;
+				queuedQuestions = [];
+			}
+		}
+	}
+	async function updateQuestion(question: PresenterQuestion, input: { status?: QuestionStatus; hidden?: boolean }) {
+		if (updatingQuestionIds.includes(question.id)) return;
+		updatingQuestionIds = [...updatingQuestionIds, question.id];
+		try {
+			const res = await fetch(`/present/${data.id}/questions/${question.id}`, {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(input)
+			});
+			const result = await res.json().catch(() => ({})) as { question?: unknown };
+			const updated = readQuestion(result.question);
+			if (!res.ok || !updated) throw new Error('question_update_failed');
+			questions = mergeQuestions(questions, [updated]);
+		} catch {
+			questionAnnouncement = t('present.question_update_failed');
+		} finally {
+			updatingQuestionIds = updatingQuestionIds.filter((id) => id !== question.id);
+		}
+	}
 	$effect(() => {
 		if (showEndDialog) void tick().then(() => { if (!endDialog?.open) endDialog?.showModal(); });
 	});
@@ -139,11 +207,18 @@
 			ending = false;
 		}
 	}
-	function readQuestions(value: unknown): Array<{ text: string; slide: number; ts: number }> | null {
+	function readQuestion(value: unknown): PresenterQuestion | null {
+		if (!value || typeof value !== 'object') return null;
+		const question = value as Partial<PresenterQuestion>;
+		if (typeof question.id !== 'string' || typeof question.text !== 'string' || !Number.isFinite(question.slide) || !Number.isFinite(question.ts)) return null;
+		if (question.status !== 'open' && question.status !== 'starred' && question.status !== 'done') return null;
+		if (question.hidden !== undefined && typeof question.hidden !== 'boolean') return null;
+		return { id: question.id, text: question.text, slide: Math.floor(question.slide!), ts: question.ts!, status: question.status, ...(question.hidden ? { hidden: true } : {}) };
+	}
+	function readQuestions(value: unknown): PresenterQuestion[] | null {
 		if (!Array.isArray(value)) return null;
-		return value
-			.filter((question): question is { text: string; slide: number; ts: number } => Boolean(question) && typeof question.text === 'string' && Number.isFinite(question.slide) && Number.isFinite(question.ts))
-			.map((question) => ({ text: question.text, slide: Math.floor(question.slide), ts: question.ts }));
+		const parsed = value.map(readQuestion);
+		return parsed.every((question): question is PresenterQuestion => question !== null) ? parsed : null;
 	}
 	function readStats(value: unknown): typeof stats | null {
 		if (!value || typeof value !== 'object') return null;
@@ -158,9 +233,28 @@
 		QRCode.toDataURL(viewerUrl, { margin: 1, width: 320 }).then((d) => (qr = d));
 		window.addEventListener('keydown', key);
 		presenterEvents = new EventSource(`/present/${data.id}/events`);
+		presenterEvents.addEventListener('open', () => { void syncQuestionSnapshot(); });
 		presenterEvents.addEventListener('stats', (e) => { const j = JSON.parse((e as MessageEvent).data); stats = { ...j.stats, questions: Math.max(j.stats.questions, questions.length) }; });
 		presenterEvents.addEventListener('reaction', (e) => { const j = JSON.parse((e as MessageEvent).data); signal(j.slide, 'reaction'); push(presenterFeedItem({ type: 'reaction', reaction: j.reaction, slide: j.slide, ts: j.ts }, locale)); });
-		presenterEvents.addEventListener('question', (e) => { const j = JSON.parse((e as MessageEvent).data); questions = [...questions, { text: j.text, slide: j.slide, ts: j.ts }]; stats = { ...stats, questions: questions.length }; signal(j.slide, 'question'); push(presenterFeedItem({ type: 'question', text: j.text, slide: j.slide, ts: j.ts }, locale)); });
+		presenterEvents.addEventListener('question', (e) => {
+			const question = readQuestion(JSON.parse((e as MessageEvent).data));
+			if (!question) return;
+			const isNew = !questions.some((candidate) => candidate.id === question.id) && !queuedQuestions.some((candidate) => candidate.id === question.id);
+			if (syncingQuestions) queuedQuestions = mergeQuestions(queuedQuestions, [question]);
+			else questions = mergeQuestions(questions, [question]);
+			stats = { ...stats, questions: Math.max(stats.questions, questions.length + queuedQuestions.length) };
+			if (isNew) {
+				if (!showQuestions) unreadQuestions += 1;
+				questionAnnouncement = t('present.question_live');
+				signal(question.slide, 'question');
+				push(presenterFeedItem({ type: 'question', text: question.text, slide: question.slide, ts: question.ts }, locale));
+			}
+		});
+		presenterEvents.addEventListener('question_moderation', (e) => {
+			const payload = JSON.parse((e as MessageEvent).data) as { question?: unknown };
+			const question = readQuestion(payload.question);
+			if (question) questions = mergeQuestions(questions, [question]);
+		});
 		presenterEvents.addEventListener('bookmark', (e) => { const j = JSON.parse((e as MessageEvent).data); signal(j.slide, 'bookmark'); push(presenterFeedItem({ type: 'bookmark', slide: j.slide, ts: j.ts }, locale)); });
 		presenterEvents.addEventListener('ended', (e) => { const j = JSON.parse((e as MessageEvent).data); endedAt = j.ts; ended = true; showEndDialog = false; showSession = false; closePresenterStream(); });
 		return () => { window.removeEventListener('keydown', key); closePresenterStream(); };
@@ -190,8 +284,9 @@
 <main>
 	<header class="topbar">
 		<div><span class="mono kicker">{t('present.remote_control')}</span><strong>{current + 1} / {total}</strong></div>
-			<nav><a href={`/present/${data.id}/stats`}>{t('common.stats')}</a><button aria-haspopup="dialog" onclick={(e) => openJoin(e.currentTarget)}>{t('present.join')}</button><button bind:this={sessionTrigger} aria-expanded={showSession} onclick={() => (showSession = !showSession)}>{t('present.session')}</button></nav>
+			<nav><a href={`/present/${data.id}/stats`}>{t('common.stats')}</a><button bind:this={questionTrigger} class="question-trigger" aria-haspopup="dialog" onclick={(e) => openQuestions(e.currentTarget)}><span>{t('present.questions_entry', { count: questionCount })}</span>{#if unreadQuestions > 0}<strong aria-label={t('present.questions_unread', { count: unreadQuestions })}>{unreadQuestions}</strong>{/if}</button><button aria-haspopup="dialog" onclick={(e) => openJoin(e.currentTarget)}>{t('present.join')}</button><button bind:this={sessionTrigger} aria-expanded={showSession} onclick={() => (showSession = !showSession)}>{t('present.session')}</button></nav>
 	</header>
+	<p class="question-announcement" aria-live="polite">{questionAnnouncement}</p>
 	{#if showSession}
 		<section class="session-menu" aria-label={t('present.session_menu_label')}><p>{t('present.session_menu_body')}</p><button onclick={requestEnd}>{t('present.end_session')}</button></section>
 	{/if}
@@ -201,6 +296,42 @@
 			<button class="sheet-close" onclick={closeJoin}>{t('present.join_close')}</button>
 			{#if qr}<img src={qr} alt={t('present.qr_alt')} width="132" height="132" />{/if}
 			<div><span class="mono kicker">{t('present.audience_link')}</span><p class="url">{viewerUrl}</p><p>{t('present.join_help')}</p></div>
+		</dialog>
+	{/if}
+
+	{#if showQuestions}
+		<dialog bind:this={questionDialog} class="question-sheet" aria-labelledby="questions-title" onclose={handleQuestionsClosed}>
+			<header class="question-sheet-head">
+				<div><span class="mono kicker">{t('present.questions_kicker')}</span><h2 id="questions-title">{t('present.questions_title', { count: questionCount })}</h2></div>
+				<button class="sheet-close" onclick={closeQuestions}>{t('common.close')}</button>
+			</header>
+			<div class="question-filters" aria-label={t('present.questions_filters')}>
+				<button aria-pressed={questionFilter === 'open'} onclick={() => (questionFilter = 'open')}>{t('present.questions_open')}</button>
+				<button aria-pressed={questionFilter === 'starred'} onclick={() => (questionFilter = 'starred')}>{t('present.questions_starred')}</button>
+				<button aria-pressed={questionFilter === 'done'} onclick={() => (questionFilter = 'done')}>{t('present.questions_done')}</button>
+			</div>
+			<div class="question-list">
+				{#if filteredQuestions.length === 0}
+					<p class="questions-empty">{t('present.questions_empty')}</p>
+				{:else}
+					{#each filteredQuestions as question (question.id)}
+						<article class:hidden={question.hidden}>
+							<div class="question-meta"><span>{t('common.slide')} {question.slide + 1}</span><time datetime={new Date(question.ts).toISOString()}>{new Date(question.ts).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}</time>{#if question.hidden}<strong>{t('present.question_hidden')}</strong>{/if}</div>
+							<p>{question.text}</p>
+							<div class="question-actions">
+								{#if question.status !== 'starred'}<button disabled={updatingQuestionIds.includes(question.id)} onclick={() => updateQuestion(question, { status: 'starred' })}>{t('present.question_star')}</button>{/if}
+								{#if question.status !== 'done'}<button disabled={updatingQuestionIds.includes(question.id)} onclick={() => updateQuestion(question, { status: 'done' })}>{t('present.question_done')}</button>{/if}
+								{#if question.status !== 'open'}<button disabled={updatingQuestionIds.includes(question.id)} onclick={() => updateQuestion(question, { status: 'open' })}>{t('present.question_reopen')}</button>{/if}
+								<button disabled={updatingQuestionIds.includes(question.id)} onclick={() => updateQuestion(question, { hidden: !question.hidden })}>{question.hidden ? t('present.question_unhide') : t('present.question_hide')}</button>
+							</div>
+						</article>
+					{/each}
+				{/if}
+			</div>
+			<footer class="question-sheet-foot">
+				<p>{t('present.questions_memory_hint')}</p>
+				<div><a href={`/present/${data.id}/questions`}>{t('present.export_questions')}</a><a href={`/present/${data.id}/questions?include=hidden`}>{t('present.export_questions_hidden')}</a></div>
+			</footer>
 		</dialog>
 	{/if}
 
@@ -266,6 +397,9 @@
 	nav { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 	nav a, nav button, .coach-toggle, .secondary, .primary { border: 1px solid var(--hair); border-radius: 999px; background: var(--surface); color: var(--fg); text-decoration: none; min-height: 44px; padding: 0 14px; font-weight: 760; }
 	nav a, nav button { appearance: none; display: inline-flex; align-items: center; justify-content: center; min-width: 62px; height: 44px; padding: 0 12px; line-height: 1; font-size: 14px; letter-spacing: -.15px; white-space: nowrap; box-shadow: none; }
+	nav .question-trigger { gap: 6px; }
+	nav .question-trigger strong { min-width: 22px; height: 22px; display: inline-grid; place-items: center; border-radius: 999px; background: var(--accent); color: var(--accent-fg); font-size: 11px; }
+	.question-announcement { position: fixed; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	.join-sheet, .remote-stage, .coach-card, .notes, .feed, .session-menu { border: 1px solid var(--hair); border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--shadow-soft); }
 	.session-menu { padding: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 	.session-menu p { color: var(--muted); font-size: 12px; }
@@ -276,6 +410,28 @@
 	.sheet-close { grid-column:1 / -1; justify-self:end; min-height:44px; border:1px solid var(--hair); border-radius:999px; padding:0 14px; background:var(--surface-2); color:var(--fg); font-weight:760; }
 	.join-sheet img { width: 112px; height: 112px; border-radius: 18px; background: #fff; padding: 7px; }
 	.join-sheet p { color: var(--muted); font-size: 12px; line-height: 1.4; }
+	.question-sheet { position: fixed; width: min(calc(100% - 24px), 680px); max-height: calc(100dvh - 24px); inset: auto 12px 12px; margin: auto; border: 1px solid var(--hair); border-radius: 28px; background: var(--bg); color: var(--fg); box-shadow: var(--shadow-soft); padding: 14px; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 12px; }
+	.question-sheet[open] { display: grid; }
+	.question-sheet::backdrop { background: color-mix(in srgb, #000 60%, transparent); }
+	.question-sheet-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+	.question-sheet-head h2 { margin-top: 4px; font-size: clamp(24px, 7vw, 36px); line-height: 1; letter-spacing: -.8px; }
+	.question-sheet .sheet-close { grid-column: auto; flex: 0 0 auto; }
+	.question-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+	.question-filters button, .question-actions button, .question-sheet-foot a { min-height: 44px; border: 1px solid var(--hair); border-radius: 999px; background: var(--surface); color: var(--fg); padding: 0 10px; font: inherit; font-size: 12px; font-weight: 760; }
+	.question-filters button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+	.question-list { min-height: 88px; overflow-y: auto; display: grid; align-content: start; gap: 8px; }
+	.question-list article { border: 1px solid var(--hair); border-radius: 18px; background: var(--surface); padding: 12px; }
+	.question-list article.hidden { opacity: .62; border-style: dashed; }
+	.question-list article > p { margin: 8px 0 12px; line-height: 1.45; overflow-wrap: anywhere; }
+	.question-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; color: var(--muted); font-size: 11px; }
+	.question-meta strong { color: var(--fg); }
+	.question-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+	.question-actions button:disabled { opacity: .48; }
+	.questions-empty { align-self: center; margin: 18px; color: var(--muted); text-align: center; line-height: 1.45; }
+	.question-sheet-foot { display: grid; gap: 8px; border-top: 1px solid var(--hair); padding-top: 10px; }
+	.question-sheet-foot p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+	.question-sheet-foot div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+	.question-sheet-foot a { display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; }
 	.url { color: var(--fg) !important; font-size: 13px !important; font-weight: 800; word-break: break-all; margin: 4px 0; }
 	.remote-stage { padding: 12px; display: grid; gap: 10px; }
 	.slide-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }
@@ -332,6 +488,8 @@
 	.secondary-link { color: var(--muted); min-height: 44px; }
 	.export-link { display: flex; align-items: center; justify-content: center; min-height: 48px; text-decoration: none; }
 	.export-hint { margin: 0 0 4px; font-size: 12px; color: var(--muted); text-align: center; }
+	@media (max-width: 560px) { .topbar { grid-template-columns: 1fr; } nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } nav a, nav button { min-width: 0; width: 100%; } }
+	@media (max-width: 340px) { .question-sheet { width: calc(100% - 12px); inset-inline: 6px; padding: 10px; } .question-sheet-foot div { grid-template-columns: 1fr; } }
 	@media (max-height: 700px) { .mini-slide { width: min(50vw, 220px); max-height: 24dvh; } .slide-title h1 { font-size: clamp(22px, 7vw, 34px); } .notes, .feed { display:none; } }
 	@media (min-width: 780px) { main { max-width: 780px; margin: 0 auto; } .mini-slide { max-height: 56dvh; } }
 </style>
