@@ -2,6 +2,8 @@
 
 [`template.json`](template.json) is the reviewable source for the intended template: one eigen.beam service from `ghcr.io/onetechgroupll/eigen-beam:v0.1`, Railway Postgres, and a private Railway Bucket. The image runs migrations before starting and Railway probes `/readyz` before sending traffic.
 
+The template intentionally pins the minor tag `v0.1`, so patch releases apply on redeploy and run their on-boot migrations. To stay on an exact version, pin `vX.Y.Z` (or an image digest) and follow the [upgrade guide](../../docs/upgrading.md).
+
 Railway currently stores multi-service templates in its dashboard. It does not document a repository JSON format that can import the whole template, so this draft deliberately mirrors the dashboard object rather than pretending to be directly executable.
 
 ## Maintainer: publish the live template
