@@ -63,6 +63,12 @@ Open the printed URL, tap **Live-Sync testen**, then open the viewer link in a s
 
 Local development needs no database and no API keys: decks are stored as files under `.data/`, mail goes to a local outbox.
 
+One-click Railway deployment will be enabled as soon as the published template ID is available.
+
+<!-- TODO(T8): Replace <id> with the published Railway template ID, verify the URL, then uncomment this block.
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.app/new/template/<id>)
+-->
+
 **Run it with Docker:**
 
 ```bash

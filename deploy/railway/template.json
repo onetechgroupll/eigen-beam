@@ -1,0 +1,193 @@
+{
+  "_comment": "Reviewable draft of the eigen.beam Railway template. Railway multi-service templates are dashboard-hosted objects and cannot currently be imported from this file. Reproduce this snapshot in the template editor, test it, and keep both copies aligned.",
+  "name": "eigen.beam",
+  "description": "Mobile live-sync presentations with durable Postgres data, private S3-compatible asset storage and real magic-link email delivery.",
+  "buckets": {
+    "eigen-beam-assets": {
+      "name": "eigen-beam-assets",
+      "_comment": "Private Railway Bucket. Railway exposes BUCKET, ENDPOINT, REGION, ACCESS_KEY_ID and SECRET_ACCESS_KEY for the references on the app service. The deployment region is selected in Railway."
+    }
+  },
+  "services": {
+    "eigen-beam": {
+      "name": "eigen-beam",
+      "source": {
+        "image": "ghcr.io/onetechgroupll/eigen-beam:v0.1"
+      },
+      "deploy": {
+        "startCommand": null,
+        "healthcheckPath": "/readyz"
+      },
+      "networking": {
+        "targetPort": 3000,
+        "publicDomain": true
+      },
+      "variables": {
+        "NODE_ENV": {
+          "defaultValue": "production",
+          "isOptional": false,
+          "description": "Enables eigen.beam's fail-closed production configuration checks. Leave as-is."
+        },
+        "ORIGIN": {
+          "defaultValue": "https://${{RAILWAY_PUBLIC_DOMAIN}}",
+          "isOptional": false,
+          "description": "Public HTTPS origin used for CSRF checks and absolute magic-link URLs. Pre-wired to the Railway domain; replace it when attaching a custom domain."
+        },
+        "EB_DECK_STORE": {
+          "defaultValue": "postgres",
+          "isOptional": false,
+          "description": "Stores decks in Postgres so they survive deploys. Leave as-is."
+        },
+        "EB_ACTIVITY_STORE": {
+          "defaultValue": "postgres",
+          "isOptional": false,
+          "description": "Stores replay sessions, events and follows in Postgres. Leave as-is."
+        },
+        "DATABASE_URL": {
+          "defaultValue": "${{Postgres.DATABASE_URL}}",
+          "isOptional": false,
+          "description": "Private Postgres connection string supplied by the attached Postgres service. Leave as-is."
+        },
+        "EB_ASSET_STORE": {
+          "defaultValue": "s3",
+          "isOptional": false,
+          "description": "Stores uploaded slide images in the attached Railway Bucket. Leave as-is."
+        },
+        "EB_BUCKET_ENDPOINT": {
+          "defaultValue": "${{eigen-beam-assets.ENDPOINT}}",
+          "isOptional": false,
+          "description": "S3 API endpoint supplied by the Railway Bucket. Leave as-is."
+        },
+        "EB_BUCKET_NAME": {
+          "defaultValue": "${{eigen-beam-assets.BUCKET}}",
+          "isOptional": false,
+          "description": "Globally unique S3 bucket name supplied by Railway. Leave as-is."
+        },
+        "EB_BUCKET_REGION": {
+          "defaultValue": "${{eigen-beam-assets.REGION}}",
+          "isOptional": false,
+          "description": "S3 region supplied by the Railway Bucket. Leave as-is."
+        },
+        "EB_BUCKET_ACCESS_KEY": {
+          "defaultValue": "${{eigen-beam-assets.ACCESS_KEY_ID}}",
+          "isOptional": false,
+          "description": "Access key supplied by the Railway Bucket. This is not an AWS account key; leave the reference as-is."
+        },
+        "EB_BUCKET_SECRET_KEY": {
+          "defaultValue": "${{eigen-beam-assets.SECRET_ACCESS_KEY}}",
+          "isOptional": false,
+          "description": "Secret access key supplied by the Railway Bucket. Leave the reference as-is."
+        },
+        "EB_BUCKET_FORCE_PATH_STYLE": {
+          "defaultValue": "false",
+          "isOptional": false,
+          "description": "Uses the virtual-hosted URL style required by current Railway Buckets. Confirm this against the bucket Credentials tab."
+        },
+        "EB_MAIL_PROVIDER": {
+          "defaultValue": "resend",
+          "isOptional": false,
+          "description": "Sends account magic links through Resend. Leave as-is for this template."
+        },
+        "EB_RESEND_API_KEY": {
+          "defaultValue": "",
+          "isOptional": false,
+          "description": "Required Resend API key used to deliver magic-link and follow emails. Provide this during deployment."
+        },
+        "EB_MAIL_FROM": {
+          "defaultValue": "",
+          "isOptional": false,
+          "description": "Required sender, for example eigen.beam <no-reply@example.com>. Verify the sender domain at Resend before deploying or magic-link delivery will fail."
+        },
+        "EB_MAGIC_LINK_SECRET": {
+          "defaultValue": "${{secret(64, \"abcdef0123456789\")}}",
+          "isOptional": false,
+          "description": "Auto-generated 32-byte hexadecimal secret for magic links, sessions, PIN cookies and signed anonymous creator IDs. Keep it stable and secret."
+        },
+        "EB_MCP_TOKEN": {
+          "defaultValue": "${{secret(64, \"abcdef0123456789\")}}",
+          "isOptional": false,
+          "description": "Auto-generated bearer token that keeps the remote MCP endpoint fail-closed. Keep it secret; rotate deliberately."
+        },
+        "EB_MIGRATE_ON_BOOT": {
+          "defaultValue": "true",
+          "isOptional": false,
+          "description": "Applies pending Postgres migrations before the app starts. Leave true for the one-click deployment."
+        }
+      }
+    },
+    "Postgres": {
+      "name": "Postgres",
+      "source": {
+        "image": "ghcr.io/railwayapp-templates/postgres-ssl:18"
+      },
+      "_comment": "Snapshot of Railway's managed Postgres template contract. In the dashboard, add Railway's Postgres database resource so Railway owns its persistent volume and lifecycle, then confirm these generated variables.",
+      "variables": {
+        "PGDATA": {
+          "defaultValue": "/var/lib/postgresql/data/pgdata",
+          "isOptional": false,
+          "description": "Directory used by the managed Postgres volume. Leave as-is."
+        },
+        "PGHOST": {
+          "defaultValue": "${{RAILWAY_PRIVATE_DOMAIN}}",
+          "isOptional": false,
+          "description": "Private Railway hostname for Postgres. Leave as-is."
+        },
+        "PGPORT": {
+          "defaultValue": "5432",
+          "isOptional": false,
+          "description": "Postgres port. Leave as-is."
+        },
+        "PGUSER": {
+          "defaultValue": "${{POSTGRES_USER}}",
+          "isOptional": false,
+          "description": "Database user copied from POSTGRES_USER. Leave as-is."
+        },
+        "PGDATABASE": {
+          "defaultValue": "${{POSTGRES_DB}}",
+          "isOptional": false,
+          "description": "Database name copied from POSTGRES_DB. Leave as-is."
+        },
+        "PGPASSWORD": {
+          "defaultValue": "${{POSTGRES_PASSWORD}}",
+          "isOptional": false,
+          "description": "Database password copied from POSTGRES_PASSWORD. Leave as-is."
+        },
+        "POSTGRES_DB": {
+          "defaultValue": "railway",
+          "isOptional": false,
+          "description": "Database used by eigen.beam."
+        },
+        "POSTGRES_USER": {
+          "defaultValue": "postgres",
+          "isOptional": false,
+          "description": "Postgres database user."
+        },
+        "POSTGRES_PASSWORD": {
+          "defaultValue": "${{secret(32, \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\")}}",
+          "isOptional": false,
+          "description": "Database password generated once when the template is deployed. Keep it secret."
+        },
+        "DATABASE_URL": {
+          "defaultValue": "postgresql://${{PGUSER}}:${{POSTGRES_PASSWORD}}@${{RAILWAY_PRIVATE_DOMAIN}}:5432/${{PGDATABASE}}",
+          "isOptional": false,
+          "description": "Private connection string consumed by the eigen.beam service. Leave as-is."
+        },
+        "DATABASE_PUBLIC_URL": {
+          "defaultValue": "postgresql://${{PGUSER}}:${{POSTGRES_PASSWORD}}@${{RAILWAY_TCP_PROXY_DOMAIN}}:${{RAILWAY_TCP_PROXY_PORT}}/${{PGDATABASE}}",
+          "isOptional": false,
+          "description": "Public connection string for operator backups and diagnostics. Do not expose it."
+        },
+        "SSL_CERT_DAYS": {
+          "defaultValue": "820",
+          "isOptional": false,
+          "description": "Validity period for the database service's self-signed certificate."
+        },
+        "RAILWAY_DEPLOYMENT_DRAINING_SECONDS": {
+          "defaultValue": "60",
+          "isOptional": false,
+          "description": "Grace period for a clean Postgres shutdown during redeploys."
+        }
+      }
+    }
+  }
+}

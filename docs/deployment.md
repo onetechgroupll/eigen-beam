@@ -63,6 +63,20 @@ Set `EB_MIGRATE_ON_BOOT=false` only when a separate release step runs that comma
 
 The reference instance runs on Railway; nothing in the code depends on it.
 
+The one-click template is drafted in [`deploy/railway/template.json`](../deploy/railway/template.json), with its publishing and five-minute acceptance walkthrough in [`deploy/railway/README.md`](../deploy/railway/README.md). Until the maintainer publishes the dashboard template and inserts its ID, the README button stays commented out rather than linking to a dead deployment.
+
+For the template path:
+
+1. Click the published **Deploy on Railway** button. The template creates the app from `ghcr.io/onetechgroupll/eigen-beam:v0.1`, Postgres and a private Railway Bucket.
+2. Provide the required `EB_RESEND_API_KEY` and `EB_MAIL_FROM` fields. Verify the `EB_MAIL_FROM` sender domain at Resend before deploying; setting an address alone is not domain verification.
+3. Deploy. The template wires Postgres and Bucket variables, generates the signing and MCP secrets, applies migrations on boot and checks `/readyz` before Railway sends traffic.
+4. Require the public `/readyz` endpoint to return HTTP `200` with `"ok": true`.
+5. Complete the real mail acceptance: request a magic link from `/account`, confirm it arrives in the inbox, open it, and verify that login works. Readiness cannot prove external mail delivery.
+
+To assemble or update the live dashboard template, follow the maintainer section in the template walkthrough; the JSON file is a reviewable snapshot because Railway currently hosts multi-service template definitions in its dashboard.
+
+For a manual Railway deployment instead:
+
 1. Create a project with a Postgres database and a bucket (Railway Buckets are S3-compatible).
 2. Add a service from this repository. Railway detects the `Dockerfile`. (The image declares no Docker `VOLUME`; Railway rejects those. In production mode nothing needs a volume. For minimal mode, attach a Railway Volume at `/data`.)
 3. Set the [environment](#environment). Railway's Postgres provides `DATABASE_URL`.

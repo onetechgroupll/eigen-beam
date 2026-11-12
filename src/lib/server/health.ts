@@ -160,14 +160,20 @@ function checkAssetStore(source: EnvLike, production: boolean, mode: string): Re
 
 function checkMailer(source: EnvLike, production: boolean, mode: string): ReadinessCheck {
 	if (mode === 'resend') {
-		return source.EB_RESEND_API_KEY
-			? readyCheck('configured provider', 'resend configured')
-			: notReadyCheck('configured provider', 'resend credential missing', ['EB_MAIL_PROVIDER', 'EB_RESEND_API_KEY']);
+		if (!source.EB_RESEND_API_KEY) {
+			return notReadyCheck('configured provider', 'resend credential missing', ['EB_MAIL_PROVIDER', 'EB_RESEND_API_KEY']);
+		}
+		return production && !source.EB_MAIL_FROM
+			? notReadyCheck('configured sender address', 'sender address missing', ['EB_MAIL_FROM'])
+			: readyCheck('configured provider', 'resend configured');
 	}
 	if (mode === 'postmark') {
-		return source.EB_POSTMARK_TOKEN
-			? readyCheck('configured provider', 'postmark configured')
-			: notReadyCheck('configured provider', 'postmark credential missing', ['EB_MAIL_PROVIDER', 'EB_POSTMARK_TOKEN']);
+		if (!source.EB_POSTMARK_TOKEN) {
+			return notReadyCheck('configured provider', 'postmark credential missing', ['EB_MAIL_PROVIDER', 'EB_POSTMARK_TOKEN']);
+		}
+		return production && !source.EB_MAIL_FROM
+			? notReadyCheck('configured sender address', 'sender address missing', ['EB_MAIL_FROM'])
+			: readyCheck('configured provider', 'postmark configured');
 	}
 	return !production
 		? readyCheck('development mailer', mode || 'outbox')

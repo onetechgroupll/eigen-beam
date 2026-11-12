@@ -583,6 +583,7 @@ Kurz.`;
 				EB_BUCKET_NAME: 'bucket',
 				EB_MAIL_PROVIDER: 'resend',
 				EB_RESEND_API_KEY: 'resend-secret',
+				EB_MAIL_FROM: 'eigen.beam <no-reply@example.com>',
 				EB_MCP_TOKENS: 'token|deck:read'
 			},
 			readDatabaseSchema: async () => EXPECTED_SCHEMA_MIGRATION
@@ -595,6 +596,27 @@ Kurz.`;
 		}
 		assert.equal(JSON.stringify(ready).includes('postgres://redacted'), false);
 		assert.equal(JSON.stringify(ready).includes('resend-secret'), false);
+
+		const missingMailFrom = await readinessPayload({
+			env: {
+				NODE_ENV: 'production',
+				ORIGIN: 'https://eigen.example',
+				EB_MAGIC_LINK_SECRET: 'secret',
+				EB_DECK_STORE: 'postgres',
+				EB_ACTIVITY_STORE: 'postgres',
+				DATABASE_URL: 'postgres://redacted',
+				EB_ASSET_STORE: 's3',
+				EB_BUCKET_NAME: 'bucket',
+				EB_MAIL_PROVIDER: 'resend',
+				EB_RESEND_API_KEY: 'resend-secret',
+				EB_MCP_TOKENS: 'token|deck:read'
+			},
+			readDatabaseSchema: async () => EXPECTED_SCHEMA_MIGRATION
+		});
+		assert.equal(missingMailFrom.ok, false);
+		assert.equal(missingMailFrom.checks.mailer.status, 'not_ready');
+		assert.match(missingMailFrom.checks.mailer.expected, /sender address/i);
+		assert.match(missingMailFrom.checks.mailer.fix, /\bEB_MAIL_FROM\b/);
 
 		const notReady = await readinessPayload({
 			env: { NODE_ENV: 'production', EB_DECK_STORE: 'file', EB_ACTIVITY_STORE: 'off' },
@@ -617,6 +639,7 @@ Kurz.`;
 				EB_BUCKET_NAME: 'bucket',
 				EB_MAIL_PROVIDER: 'postmark',
 				EB_POSTMARK_TOKEN: 'postmark-secret',
+				EB_MAIL_FROM: 'eigen.beam <no-reply@example.com>',
 				EB_OAUTH_CLIENTS: 'client:secret|deck:read',
 				EB_OAUTH_TOKEN_SECRET: 'oauth-secret'
 			},
@@ -671,6 +694,7 @@ Kurz.`;
 				EB_BUCKET_NAME: 'bucket',
 				EB_MAIL_PROVIDER: 'resend',
 				EB_RESEND_API_KEY: 'resend-secret',
+				EB_MAIL_FROM: 'eigen.beam <no-reply@example.com>',
 				EB_MCP_TOKENS: 'token|deck:read'
 			},
 			readDatabaseSchema: async () => '999_future_additive'
