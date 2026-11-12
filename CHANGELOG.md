@@ -4,6 +4,7 @@ Semver tags publish a GHCR image and a GitHub release. Each versioned section in
 
 ## [Unreleased]
 
+- Added presenter question moderation: a sheet with unread count, filters and reversible star/done/hide, a room-wide question cap, and a Markdown export grouped by slide with injection-safe question text. Audience-side voting stays out of scope (ADR 0004).
 - Added a 60-second demo GIF to the README: presenter swipes on a phone, the room screen and every audience phone follow in sync, a question arrives, the session ends with a replay.
 - Removed the daily adoption-metrics capture workflow and its fine-grained token requirement. Adoption is now measured at the roadmap's day-30 and day-90 gates directly from public GitHub counters (stars, forks and non-maintainer issues/pull requests) and the GHCR package page.
 
