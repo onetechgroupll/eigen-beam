@@ -4,7 +4,7 @@ Semver tags publish a GHCR image and a GitHub release. Each versioned section in
 
 ## [Unreleased]
 
-_Nothing yet on the next wave. The roadmap lives in [ROADMAP.md](ROADMAP.md)._
+- Removed the daily adoption-metrics capture workflow and its fine-grained token requirement. Adoption is now measured at the roadmap's day-30 and day-90 gates directly from public GitHub counters (stars, forks and non-maintainer issues/pull requests) and the GHCR package page.
 
 ## v0.1.0
 
