@@ -23,6 +23,7 @@ The browser app talks to these endpoints. You can call them from scripts too. Fo
 | `file_required`, `image_required`, `pdf_required`, `pptx_required`, `audio_required`, `unsupported_file` | 400/415/422 | An upload is missing or unsupported. |
 | `source_too_long`, `file_too_large` | 413 | A request exceeded a documented size limit. |
 | `too_many_requests` | 429 | The per-process request limit was exceeded. |
+| `question_limit` | 429 | The room already contains the maximum number of questions. |
 | `busy` | 503 | The live room capacity is exhausted. |
 | `mail_failed`, `internal_error` | 500/502 | A server-side operation failed. |
 
@@ -220,6 +221,8 @@ Either field may be sent independently. Set `status` to `open` to reopen a starr
 | `question` | `text`: 1–280 characters after trimming |
 | `bookmark` | — |
 | `reopen` | — |
+
+A room accepts at most 200 questions. Further question submissions return `429 question_limit` with a localized, viewer-safe message; other signal types continue to work.
 
 `slide` is optional and defaults to the live slide. → `{ ok: true }`. Errors: `400` (unknown type, empty question), `403` (PIN), `410` (ended).
 

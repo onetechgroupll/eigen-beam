@@ -16,8 +16,9 @@ import { localClarify } from '../src/lib/server/clarity.ts';
 import Anthropic from '@anthropic-ai/sdk';
 import { DEFAULT_CLAUDE_MODEL, claudeModel, parseDeckJson, requestDeckJson } from '../src/lib/server/claude.ts';
 import { sniffImage, S3AssetStore } from '../src/lib/server/assets.ts';
-import { claimPresenterToken, createRoom, endRoom, ENDED_ROOM_TTL_MS, evictRoomForCapacity, getReplay, getRoom, listPresenterQuestions, moderateQuestion, recordViewerEvent, removeRoom, resolveEndedRoomTiming, setSlide, sweepRooms } from '../src/lib/server/rooms.ts';
+import { claimPresenterToken, createRoom, endRoom, ENDED_ROOM_TTL_MS, evictRoomForCapacity, getReplay, getRoom, listPresenterQuestions, MAX_QUESTIONS_PER_ROOM, moderateQuestion, recordViewerEvent, removeRoom, resolveEndedRoomTiming, setSlide, sweepRooms } from '../src/lib/server/rooms.ts';
 import { questionExportMarkdown } from '../src/lib/server/question-export.ts';
+import { PATCH as patchQuestion } from '../src/routes/present/[id]/questions/[questionId]/+server.ts';
 import { createUnsubToken, escapeHtml, recordFollow, recordFollowDetailed, sanitizeFollowTarget, verifyUnsubToken } from '../src/lib/server/followers.ts';
 import { devLoginLine, OutboxEmailProvider, getMailerForEnv, readOutbox } from '../src/lib/server/mailer.ts';
 import { PostgresActivityStore } from '../src/lib/server/activity-store.ts';
@@ -1093,17 +1094,48 @@ Kurz.`;
 		assert.equal(moderateQuestion(id, 'wrong-token', moderatedQuestion.id, { status: 'done' }).status, 403);
 		ok('Fragenmoderation durchläuft open → starred → done → open, Hide ist reversibel und unbekannte IDs liefern 404');
 
+		const patchEvent = (body: string, token = presenterToken) => ({
+			params: { id, questionId: moderatedQuestion.id },
+			cookies: { get: () => token },
+			request: new Request(`http://localhost/present/${id}/questions/${moderatedQuestion.id}`, {
+				method: 'PATCH', headers: { 'content-type': 'application/json' }, body
+			}),
+			locals: { locale: 'de' }
+		});
+		assert.equal((await patchQuestion(patchEvent('null') as never)).status, 400);
+		assert.equal((await patchQuestion(patchEvent('{') as never)).status, 400);
+		let parsedUnauthorisedBody = false;
+		const unauthorisedPatch = await patchQuestion({
+			...patchEvent('{}', 'wrong-token'),
+			request: { json: async () => { parsedUnauthorisedBody = true; return {}; } }
+		} as never);
+		assert.equal(unauthorisedPatch.status, 403);
+		assert.equal(parsedUnauthorisedBody, false);
+		ok('Moderationsroute authentifiziert vor dem Parsen und liefert für null/kaputtes JSON 400');
+
+		const cappedRoom = createRoom(parseDeck('# Cap'));
+		for (let index = 0; index < MAX_QUESTIONS_PER_ROOM; index += 1) {
+			assert.equal(recordViewerEvent(cappedRoom.id, { type: 'question', text: `Frage ${index}` }).ok, true);
+		}
+		assert.deepEqual(recordViewerEvent(cappedRoom.id, { type: 'question', text: 'Eine zu viel' }), { ok: false, status: 429, code: 'question_limit' });
+		assert.equal(listPresenterQuestions(cappedRoom.id, cappedRoom.presenterToken).questions?.length, MAX_QUESTIONS_PER_ROOM);
+		removeRoom(cappedRoom.id);
+		ok('Room-Cap lehnt die 201. Frage freundlich ab und hält den Presenter-Snapshot bei 200');
+
 		const exportQuestions = [
 			{ id: 'open', text: 'Open', slide: 0, ts: 2, status: 'open' as const },
 			{ id: 'starred', text: 'Starred', slide: 0, ts: 3, status: 'starred' as const },
 			{ id: 'next', text: 'Next slide', slide: 1, ts: 1, status: 'done' as const },
-			{ id: 'hidden', text: 'Hidden starred', slide: 0, ts: 1, status: 'starred' as const, hidden: true }
+			{ id: 'hidden', text: 'Hidden starred', slide: 0, ts: 1, status: 'starred' as const, hidden: true },
+			{ id: 'unsafe', text: '<img src=x onerror=alert(1)> [click](javascript:alert(1))', slide: 1, ts: 4, status: 'open' as const }
 		];
 		const publicQuestionExport = questionExportMarkdown(exportQuestions, { heading: 'Questions', slide: 'Slide' });
 		assert.ok(publicQuestionExport.indexOf('Starred') < publicQuestionExport.indexOf('Open'));
 		assert.ok(publicQuestionExport.indexOf('## Slide 1') < publicQuestionExport.indexOf('## Slide 2'));
 		assert.match(publicQuestionExport, /\[1970-01-01T00:00:00\.003Z\]/);
 		assert.doesNotMatch(publicQuestionExport, /Hidden starred/);
+		assert.doesNotMatch(publicQuestionExport, /<img\b|\[click\]\(javascript:/);
+		assert.equal(publicQuestionExport.includes('&lt;img src=x onerror=alert\\(1\\)&gt; \\[click\\]\\(javascript:alert\\(1\\)\\)'), true);
 		const completeQuestionExport = questionExportMarkdown(exportQuestions, { heading: 'Questions', slide: 'Slide' }, true);
 		assert.ok(completeQuestionExport.indexOf('Hidden starred') < completeQuestionExport.indexOf('Starred'));
 		ok('Fragenexport gruppiert nach Folie, sortiert Gemerkte zuerst, enthält Zeitstempel und schließt Hidden standardmäßig aus');

@@ -36,7 +36,8 @@
 	let updatingQuestionIds = $state<string[]>([]);
 	let syncingQuestions = false;
 	let questionSyncGeneration = 0;
-	let queuedQuestions: PresenterQuestion[] = [];
+	let questionEventVersion = 0;
+	let queuedQuestionEvents: PresenterQuestion[] = [];
 	let joinDialog: HTMLDialogElement | undefined = $state();
 	let endDialog: HTMLDialogElement | undefined = $state();
 	let questionDialog: HTMLDialogElement | undefined = $state();
@@ -128,26 +129,33 @@
 		for (const question of incoming) byId.set(question.id, question);
 		return [...byId.values()].sort((a, b) => a.ts - b.ts || a.id.localeCompare(b.id));
 	}
+	function applyQuestionEvent(question: PresenterQuestion, fromSse = false) {
+		if (fromSse) questionEventVersion += 1;
+		if (syncingQuestions) queuedQuestionEvents.push(question);
+		else questions = mergeQuestions(questions, [question]);
+	}
 	async function syncQuestionSnapshot() {
 		const generation = ++questionSyncGeneration;
 		syncingQuestions = true;
-		queuedQuestions = [];
+		queuedQuestionEvents = [];
 		try {
 			const res = await fetch(`/present/${data.id}/questions/snapshot`, { headers: { accept: 'application/json' } });
 			const result = await res.json().catch(() => ({})) as { questions?: unknown };
 			const snapshot = readQuestions(result.questions);
-			if (generation === questionSyncGeneration && res.ok && snapshot) questions = mergeQuestions(snapshot, queuedQuestions);
+			if (generation === questionSyncGeneration && res.ok && snapshot) questions = snapshot;
 		} finally {
 			if (generation === questionSyncGeneration) {
-				questions = mergeQuestions(questions, queuedQuestions);
+				for (const question of queuedQuestionEvents) questions = mergeQuestions(questions, [question]);
 				syncingQuestions = false;
-				queuedQuestions = [];
+				queuedQuestionEvents = [];
 			}
 		}
 	}
 	async function updateQuestion(question: PresenterQuestion, input: { status?: QuestionStatus; hidden?: boolean }) {
 		if (updatingQuestionIds.includes(question.id)) return;
 		updatingQuestionIds = [...updatingQuestionIds, question.id];
+		const eventVersion = questionEventVersion;
+		const syncGeneration = questionSyncGeneration;
 		try {
 			const res = await fetch(`/present/${data.id}/questions/${question.id}`, {
 				method: 'PATCH',
@@ -157,7 +165,7 @@
 			const result = await res.json().catch(() => ({})) as { question?: unknown };
 			const updated = readQuestion(result.question);
 			if (!res.ok || !updated) throw new Error('question_update_failed');
-			questions = mergeQuestions(questions, [updated]);
+			if (eventVersion === questionEventVersion && syncGeneration === questionSyncGeneration) applyQuestionEvent(updated);
 		} catch {
 			questionAnnouncement = t('present.question_update_failed');
 		} finally {
@@ -239,10 +247,9 @@
 		presenterEvents.addEventListener('question', (e) => {
 			const question = readQuestion(JSON.parse((e as MessageEvent).data));
 			if (!question) return;
-			const isNew = !questions.some((candidate) => candidate.id === question.id) && !queuedQuestions.some((candidate) => candidate.id === question.id);
-			if (syncingQuestions) queuedQuestions = mergeQuestions(queuedQuestions, [question]);
-			else questions = mergeQuestions(questions, [question]);
-			stats = { ...stats, questions: Math.max(stats.questions, questions.length + queuedQuestions.length) };
+			const isNew = !questions.some((candidate) => candidate.id === question.id) && !queuedQuestionEvents.some((candidate) => candidate.id === question.id);
+			applyQuestionEvent(question, true);
+			stats = { ...stats, questions: Math.max(stats.questions, questions.length + queuedQuestionEvents.length) };
 			if (isNew) {
 				if (!showQuestions) unreadQuestions += 1;
 				questionAnnouncement = t('present.question_live');
@@ -253,7 +260,7 @@
 		presenterEvents.addEventListener('question_moderation', (e) => {
 			const payload = JSON.parse((e as MessageEvent).data) as { question?: unknown };
 			const question = readQuestion(payload.question);
-			if (question) questions = mergeQuestions(questions, [question]);
+			if (question) applyQuestionEvent(question, true);
 		});
 		presenterEvents.addEventListener('bookmark', (e) => { const j = JSON.parse((e as MessageEvent).data); signal(j.slide, 'bookmark'); push(presenterFeedItem({ type: 'bookmark', slide: j.slide, ts: j.ts }, locale)); });
 		presenterEvents.addEventListener('ended', (e) => { const j = JSON.parse((e as MessageEvent).data); endedAt = j.ts; ended = true; showEndDialog = false; showSession = false; closePresenterStream(); });

@@ -73,6 +73,7 @@ export const ROOM_SWEEP_INTERVAL_MS = endedRoomTiming.sweepIntervalMs;
 const PRESENTER_CLAIM_TTL_MS = 2 * 60 * 1000;
 export const MAX_SUBSCRIBERS_PER_ROOM = 300;
 export const MAX_PRESENTER_SUBSCRIBERS_PER_ROOM = 10;
+export const MAX_QUESTIONS_PER_ROOM = 200;
 const ALLOWED_REACTIONS = new Set(['👍', '🔥', '💡', '❤️', '👏', '❓']);
 const QUESTION_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -223,7 +224,7 @@ export function subscribePresenter(id: string, token: string, fn: PresenterSubsc
 	return () => { room.presenterSubscribers.delete(fn); };
 }
 
-export function recordViewerEvent(id: string, input: { type: string; reaction?: string; text?: string; slide?: number }): { ok: boolean; status?: number } {
+export function recordViewerEvent(id: string, input: { type: string; reaction?: string; text?: string; slide?: number }): { ok: boolean; status?: number; code?: 'question_limit' } {
 	const room = rooms.get(id);
 	if (!room || room.ended) return { ok: false, status: 410 };
 	room.lastActivity = Date.now();
@@ -237,6 +238,7 @@ export function recordViewerEvent(id: string, input: { type: string; reaction?: 
 	} else if (input.type === 'question') {
 		const text = (input.text ?? '').trim().slice(0, 280);
 		if (!text) return { ok: false, status: 400 };
+		if (room.questions.length >= MAX_QUESTIONS_PER_ROOM) return { ok: false, status: 429, code: 'question_limit' };
 		const question: PresenterQuestion = { id: nanoid(10), text, slide, ts, status: 'open' };
 		room.questions.push(question);
 		room.stats.questions += 1;
@@ -362,7 +364,7 @@ function publicReplayEvents(events: ReplayEvent[]): ReplayEvent[] {
 }
 
 function presenterQuestions(room: Room): PresenterQuestion[] {
-	return room.questions.map((question) => ({ ...question }));
+	return room.questions.slice(0, MAX_QUESTIONS_PER_ROOM).map((question) => ({ ...question }));
 }
 
 function broadcastPresenter(room: Room, event: PresenterEvent): void {

@@ -19,6 +19,6 @@ export const POST: RequestHandler = async (event) => {
 		text: typeof body.text === 'string' ? body.text : undefined,
 		slide: typeof body.slide === 'number' ? body.slide : undefined
 	});
-	if (!r.ok) return apiError(event, r.status === 410 ? 'room_ended' : r.status === 403 ? 'pin_required' : body.type === 'question' ? 'question_required' : 'invalid_event', r.status ?? 400);
+	if (!r.ok) return apiError(event, r.code ?? (r.status === 410 ? 'room_ended' : r.status === 403 ? 'pin_required' : body.type === 'question' ? 'question_required' : 'invalid_event'), r.status ?? 400);
 	return json({ ok: true });
 };

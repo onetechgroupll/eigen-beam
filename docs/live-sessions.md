@@ -53,7 +53,7 @@ The remote's header shows how many viewers are connected (**● N live**) and th
 
 **Fragen (n)** in the presenter topbar opens the question sheet. It lists questions oldest first and filters them into **Offen**, **Gemerkt** and **Erledigt**. The presenter can move a question between those states, hide or unhide it, and export the list. Hidden questions stay visible to the presenter as hidden, but the default export omits them; the explicit "with hidden" export includes them. Audience members never receive moderation state, and there is no voting, upvoting or audience-ranked question list.
 
-The remote fetches one presenter-only question snapshot whenever its SSE connection opens or reconnects, buffers live question events during that fetch and then merges both by question ID. This restores the complete list without a gap. Question text and moderation state are not shown on the stats page; it contains counts only.
+The remote fetches one presenter-only question snapshot whenever its SSE connection opens or reconnects, buffers live question and moderation events during that fetch and then applies them in arrival order. PATCH responses share the same ordering guard, so neither a late snapshot nor response can roll back newer SSE state. Question text and moderation state are not shown on the stats page; it contains counts only.
 
 Question IDs and moderation state live only in the in-memory room. A server restart ends the room and loses open/starred/done/hidden state. The sheet names this limitation; moderation is deliberately not persisted into the replay.
 
@@ -91,6 +91,7 @@ Replays outlive the room only with `EB_ACTIVITY_STORE=postgres`. Without it, the
 |---|---|---|
 | Viewers per room | 300 concurrent | stream returns `503 busy` |
 | Presenter streams per room | 10 | stream closes |
+| Questions per room | 200 | further questions receive a friendly localized error |
 | Rooms per instance | 500 | ended room first, otherwise oldest idle room is closed |
 | Idle room lifetime | 12 hours | room is closed |
 | Ended room lifetime | 30 minutes by default, minimum 5 seconds | room is removed; configure with `EB_ENDED_ROOM_TTL_MS` |

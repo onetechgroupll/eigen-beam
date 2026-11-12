@@ -1,4 +1,6 @@
 import type { PresenterQuestion } from './rooms';
+import { escapeBodyLines } from '$lib/deck-parse';
+import { escapeHtml } from '$lib/server/followers';
 
 export function questionExportMarkdown(
 	questions: PresenterQuestion[],
@@ -17,7 +19,9 @@ export function questionExportMarkdown(
 			lines.push(`## ${labels.slide} ${question.slide + 1}`, '');
 		}
 		const marker = question.status === 'starred' ? '⭐ ' : '';
-		const text = question.text.replace(/\s+/g, ' ').trim();
+		const text = escapeHtml(escapeBodyLines(question.text).replace(/\s+/g, ' ').trim())
+			.replace(/\\/g, '\\\\')
+			.replace(/([\[\]()])/g, '\\$1');
 		lines.push(`- ${marker}[${new Date(question.ts).toISOString()}] ${text}`);
 	}
 	lines.push('');
