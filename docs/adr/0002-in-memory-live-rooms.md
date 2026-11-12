@@ -16,4 +16,5 @@ Durable data is separate: decks, replay sessions and events, and follows go to P
 
 - Late join and reconnect are trivial, and no database is touched per viewer event.
 - **A restart or deploy ends every active room.** Operators must not deploy during a live presentation. Decks and replays survive.
+- Presenter question-moderation state (open, starred, done and hidden) belongs to the room and is lost with it on restart; it is not part of the durable replay.
 - One process means one instance. Horizontal scaling would need shared room state (for example Redis pub/sub) and is not supported today.

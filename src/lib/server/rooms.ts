@@ -9,7 +9,8 @@ type ViewerSubscriber = (current: number, ended: boolean) => void;
 export type PresenterEvent =
 	| { type: 'stats'; stats: RoomStats }
 	| { type: 'reaction'; reaction: string; slide: number; ts: number }
-	| { type: 'question'; text: string; slide: number; ts: number }
+	| ({ type: 'question' } & PresenterQuestion)
+	| { type: 'question_moderation'; question: PresenterQuestion }
 	| { type: 'bookmark'; slide: number; ts: number }
 	| { type: 'ended'; slide: number; ts: number };
 type PresenterSubscriber = (event: PresenterEvent) => void;
@@ -35,7 +36,8 @@ export type ReplayEvent =
 	| { type: 'end'; slide: number; ts: number };
 
 export type ReplaySnapshot = { id: string; slides: Slide[]; events: ReplayEvent[]; stats: RoomStats; ended: boolean; protected?: boolean };
-export type PresenterQuestion = { text: string; slide: number; ts: number };
+export type QuestionStatus = 'open' | 'starred' | 'done';
+export type PresenterQuestion = { id: string; text: string; slide: number; ts: number; status: QuestionStatus; hidden?: boolean };
 
 export type Room = {
 	id: string;
@@ -49,6 +51,7 @@ export type Room = {
 	presenterSubscribers: Set<PresenterSubscriber>;
 	stats: RoomStats;
 	events: ReplayEvent[];
+	questions: PresenterQuestion[];
 	createdAt: number;
 	lastActivity: number;
 	endedAt?: number;
@@ -70,7 +73,9 @@ export const ROOM_SWEEP_INTERVAL_MS = endedRoomTiming.sweepIntervalMs;
 const PRESENTER_CLAIM_TTL_MS = 2 * 60 * 1000;
 export const MAX_SUBSCRIBERS_PER_ROOM = 300;
 export const MAX_PRESENTER_SUBSCRIBERS_PER_ROOM = 10;
+export const MAX_QUESTIONS_PER_ROOM = 200;
 const ALLOWED_REACTIONS = new Set(['👍', '🔥', '💡', '❤️', '👏', '❓']);
+const QUESTION_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 function evictOldestIfFull(): void {
 	if (rooms.size < MAX_ROOMS) return;
@@ -125,6 +130,7 @@ export function createRoom(slides: Slide[], opts: { pin?: string; deckId?: strin
 		presenterSubscribers: new Set(),
 		stats: { joins: 0, currentViewers: 0, peakConcurrent: 0, reopens: 0, reactions: 0, questions: 0, bookmarks: 0, startedAt: now },
 		events: [],
+		questions: [],
 		createdAt: now,
 		lastActivity: now
 	};
@@ -218,7 +224,7 @@ export function subscribePresenter(id: string, token: string, fn: PresenterSubsc
 	return () => { room.presenterSubscribers.delete(fn); };
 }
 
-export function recordViewerEvent(id: string, input: { type: string; reaction?: string; text?: string; slide?: number }): { ok: boolean; status?: number } {
+export function recordViewerEvent(id: string, input: { type: string; reaction?: string; text?: string; slide?: number }): { ok: boolean; status?: number; code?: 'question_limit' } {
 	const room = rooms.get(id);
 	if (!room || room.ended) return { ok: false, status: 410 };
 	room.lastActivity = Date.now();
@@ -232,9 +238,12 @@ export function recordViewerEvent(id: string, input: { type: string; reaction?: 
 	} else if (input.type === 'question') {
 		const text = (input.text ?? '').trim().slice(0, 280);
 		if (!text) return { ok: false, status: 400 };
+		if (room.questions.length >= MAX_QUESTIONS_PER_ROOM) return { ok: false, status: 429, code: 'question_limit' };
+		const question: PresenterQuestion = { id: nanoid(10), text, slide, ts, status: 'open' };
+		room.questions.push(question);
 		room.stats.questions += 1;
 		pushRoomEvent(room, { type: 'question', text, slide, ts });
-		broadcastPresenter(room, { type: 'question', text, slide, ts });
+		broadcastPresenter(room, { type: 'question', ...question });
 	} else if (input.type === 'bookmark') {
 		room.stats.bookmarks += 1;
 		pushRoomEvent(room, { type: 'bookmark', slide, ts });
@@ -255,6 +264,37 @@ export function getRoomStats(id: string, token?: string): RoomStats | null {
 	const room = rooms.get(id);
 	if (!room || (token && token !== room.presenterToken)) return null;
 	return { ...room.stats };
+}
+
+export function listPresenterQuestions(id: string, token: string): { ok: boolean; status?: number; questions?: PresenterQuestion[] } {
+	const room = rooms.get(id);
+	if (!room) return { ok: false, status: 404 };
+	if (token !== room.presenterToken) return { ok: false, status: 403 };
+	return { ok: true, questions: presenterQuestions(room) };
+}
+
+export function moderateQuestion(
+	id: string,
+	token: string,
+	questionId: string,
+	input: { status?: QuestionStatus; hidden?: boolean }
+): { ok: boolean; status?: number; question?: PresenterQuestion } {
+	const room = rooms.get(id);
+	if (!room) return { ok: false, status: 404 };
+	if (token !== room.presenterToken) return { ok: false, status: 403 };
+	if (!QUESTION_ID.test(questionId)) return { ok: false, status: 404 };
+	if (input.status !== undefined && !(['open', 'starred', 'done'] as const).includes(input.status)) return { ok: false, status: 400 };
+	if (input.hidden !== undefined && typeof input.hidden !== 'boolean') return { ok: false, status: 400 };
+	if (input.status === undefined && input.hidden === undefined) return { ok: false, status: 400 };
+	const question = room.questions.find((candidate) => candidate.id === questionId);
+	if (!question) return { ok: false, status: 404 };
+	if (input.status !== undefined) question.status = input.status;
+	if (input.hidden === true) question.hidden = true;
+	else if (input.hidden === false) delete question.hidden;
+	room.lastActivity = Date.now();
+	const snapshot = { ...question };
+	broadcastPresenter(room, { type: 'question_moderation', question: snapshot });
+	return { ok: true, question: snapshot };
 }
 
 export function getReplay(id: string): ReplaySnapshot | null {
@@ -324,9 +364,7 @@ function publicReplayEvents(events: ReplayEvent[]): ReplayEvent[] {
 }
 
 function presenterQuestions(room: Room): PresenterQuestion[] {
-	return room.events
-		.filter((event): event is Extract<ReplayEvent, { type: 'question' }> => event.type === 'question')
-		.map(({ text, slide, ts }) => ({ text, slide, ts }));
+	return room.questions.slice(0, MAX_QUESTIONS_PER_ROOM).map((question) => ({ ...question }));
 }
 
 function broadcastPresenter(room: Room, event: PresenterEvent): void {

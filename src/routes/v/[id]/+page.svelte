@@ -46,8 +46,24 @@
 		if (e.key === 'ArrowLeft') { e.preventDefault(); back(); }
 		if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); fwd(); }
 	}
-	async function event(type: string, extra: Record<string, unknown> = {}) { if (!unlocked || ended) return; await fetch(`/v/${data.id}/event`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type, slide: viewing, ...extra }) }); }
-	async function sendQuestion() { const text = question.trim(); if (!text) return; question = ''; await event('question', { text }); signalStatus = t('viewer.question_sent'); closeOptions(); }
+	async function event(type: string, extra: Record<string, unknown> = {}) { if (!unlocked || ended) return null; return await fetch(`/v/${data.id}/event`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type, slide: viewing, ...extra }) }); }
+	async function sendQuestion() {
+		const text = question.trim();
+		if (!text) return;
+		try {
+			const response = await event('question', { text });
+			if (!response?.ok) {
+				const error = await response?.json().catch(() => ({})) as { message?: unknown } | undefined;
+				signalStatus = typeof error?.message === 'string' ? error.message : t('common.network_error');
+				return;
+			}
+			question = '';
+			signalStatus = t('viewer.question_sent');
+			closeOptions();
+		} catch {
+			signalStatus = t('common.network_error');
+		}
+	}
 	async function sendReaction() { await event('reaction', { reaction: '👍' }); signalStatus = t('viewer.reaction_sent'); }
 	async function bookmark() { await event('bookmark'); bookmarked = true; signalStatus = t('common.bookmarked'); }
 	function openOptions(trigger: HTMLButtonElement) {
